@@ -1,19 +1,39 @@
-import { Shield, Search, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download, Shield } from "lucide-react";
 import { adminApi } from "@/services/api/admin";
+import { AdminButton, AdminPageShell, EmptyState, LoadingState, Panel, SearchInput, StatusBadge } from "@/components/admin/AdminUI";
+import { downloadCsv } from "@/lib/export";
+
+const label = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
 
 export default function AuditLogs() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [search, setSearch] = useState("");
+  const [severity, setSeverity] = useState("ALL");
   const logs = useQuery({ queryKey: ["admin", "audit-logs"], queryFn: adminApi.auditLogs });
-  const filtered = useMemo(() => (logs.data ?? []).filter((log) => `${log.action} ${log.actorEmail} ${log.detail}`.toLowerCase().includes(searchTerm.toLowerCase())), [logs.data, searchTerm]);
-
+  const rows = useMemo(() => (logs.data ?? []).filter((log) => {
+    const text = `${log.action} ${log.actorEmail} ${log.entityType ?? ""} ${log.detail ?? ""}`.toLowerCase();
+    const level = levelFor(log.action, log.detail);
+    return text.includes(search.toLowerCase()) && (severity === "ALL" || level === severity);
+  }), [logs.data, search, severity]);
   return (
-    <div className="p-5 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-8 flex items-start justify-between gap-4"><div><h1 className="text-3xl lg:text-4xl font-bold text-slate-950 mb-2">Audit Logs</h1><p className="text-slate-600">Security-relevant events written by backend services.</p></div>{logs.isFetching ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : null}</div>
-      <div className="mb-6 relative"><Search className="absolute left-4 top-3 w-5 h-5 text-slate-400" /><input type="text" placeholder="Search logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden"><div className="overflow-x-auto"><table className="w-full"><thead className="bg-slate-50 border-b"><tr><Th>Action</Th><Th>Actor</Th><Th>Entity</Th><Th>Timestamp</Th><Th>Details</Th></tr></thead><tbody className="divide-y divide-slate-200">{filtered.map((log) => <tr key={log.id} className="hover:bg-slate-50 transition"><td className="px-6 py-4 text-sm font-semibold text-slate-950 flex items-center gap-2"><Shield className="w-4 h-4 text-slate-500" />{log.action}</td><td className="px-6 py-4 text-sm text-slate-600">{log.actorEmail}</td><td className="px-6 py-4 text-sm text-slate-600">{log.entityType || "System"}{log.entityId ? ` #${log.entityId}` : ""}</td><td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td><td className="px-6 py-4 text-sm text-slate-600">{log.detail}</td></tr>)}</tbody></table></div>{!logs.isLoading && filtered.length === 0 ? <div className="p-8 text-center text-slate-500">No audit logs found.</div> : null}</div>
-    </div>
+    <AdminPageShell title="Security & Audit Logs" description="Inspect authentication, user administration, incident changes, and high-risk system events." actions={<AdminButton variant="secondary" onClick={() => downloadCsv("audit-logs.csv", rows)}><Download className="h-4 w-4" />Export</AdminButton>}>
+      {logs.isLoading ? <LoadingState label="Loading audit logs..." /> : null}
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_14rem]">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search actor, action, entity, details..." />
+        <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-3 text-sm font-semibold"><option value="ALL">All severities</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select>
+      </div>
+      <Panel title="Audit Trail" description={`${rows.length} matching events`}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px]">
+            <thead className="border-b border-slate-200 bg-slate-50"><tr><Th>Event</Th><Th>Severity</Th><Th>Actor</Th><Th>Entity</Th><Th>Timestamp</Th><Th>Details</Th></tr></thead>
+            <tbody className="divide-y divide-slate-100">{rows.map((log) => { const level = levelFor(log.action, log.detail); return <tr key={log.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-bold text-slate-950"><span className="flex items-center gap-2"><Shield className="h-4 w-4 text-slate-500" />{label(log.action)}</span></td><td className="px-4 py-3"><StatusBadge tone={level === "HIGH" ? "red" : level === "MEDIUM" ? "amber" : "green"}>{level}</StatusBadge></td><td className="px-4 py-3 text-sm text-slate-600">{log.actorEmail}</td><td className="px-4 py-3 text-sm text-slate-600">{log.entityType || "System"}{log.entityId ? ` #${log.entityId}` : ""}</td><td className="px-4 py-3 text-sm text-slate-600">{new Date(log.createdAt).toLocaleString()}</td><td className="px-4 py-3 text-sm text-slate-600">{log.detail || "No details"}</td></tr>; })}</tbody>
+          </table>
+        </div>
+        {rows.length === 0 ? <EmptyState title="No audit events found" text="Adjust filters to inspect more system activity." /> : null}
+      </Panel>
+    </AdminPageShell>
   );
 }
-function Th({ children }: { children: React.ReactNode }) { return <th className="px-6 py-4 text-left text-sm font-bold text-slate-900">{children}</th>; }
+function levelFor(action: string, detail?: string) { return /FAIL|LOCK|DENIED|INVALID|ERROR/i.test(`${action} ${detail ?? ""}`) ? "HIGH" : /UPDATE|DELETE|STATUS/i.test(action) ? "MEDIUM" : "LOW"; }
+function Th({ children }: { children: React.ReactNode }) { return <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">{children}</th>; }

@@ -10,7 +10,6 @@ import {
   Home,
   LogOut,
   Menu,
-  Phone,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -47,7 +46,7 @@ const roleDescriptions: Record<string, string> = {
   responder: "Handle assignments and routes",
   dispatcher: "Coordinate incidents and teams",
   admin: "Review people and activity",
-  guest: "SafeCommunityAI workspace",
+  guest: "SafeCommunity workspace",
 };
 
 export default function DashboardLayout({ children, navItems, currentPath }: DashboardLayoutProps) {
@@ -58,7 +57,7 @@ export default function DashboardLayout({ children, navItems, currentPath }: Das
   const [seenIds, setSeenIds] = useState<number[]>([]);
 
   const userEmail = sessionStorage.getItem("userEmail") ?? "Not signed in";
-  const userName = sessionStorage.getItem("userName") ?? "SafeCommunityAI";
+  const userName = sessionStorage.getItem("userName") ?? "SafeCommunity";
   const userRole = sessionStorage.getItem("userRole") ?? "guest";
   const initials = initialsFor(userName);
   const currentItem = useMemo(() => findCurrentItem(navItems, currentPath), [navItems, currentPath]);
@@ -124,17 +123,14 @@ export default function DashboardLayout({ children, navItems, currentPath }: Das
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                   <span>{roleLabels[userRole] ?? "Workspace"}</span>
                   <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:block" />
-                  <span className="hidden sm:inline">{roleDescriptions[userRole] ?? "SafeCommunityAI workspace"}</span>
+                  <span className="hidden sm:inline">{roleDescriptions[userRole] ?? "SafeCommunity workspace"}</span>
                 </div>
                 <h1 className="truncate text-base font-bold text-slate-950 sm:text-lg">{currentItem?.label ?? "Dashboard"}</h1>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <a href="tel:999" className="hidden items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 md:flex">
-                <Phone className="h-4 w-4" />
-                999
-              </a>
+              
               <button onClick={() => notifications.refetch()} className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100" aria-label="Refresh notifications">
                 <RefreshCw className={`h-5 w-5 ${notifications.isFetching ? "animate-spin" : ""}`} />
               </button>
@@ -194,7 +190,7 @@ function SidebarContent({ navItems, currentPath, userEmail, userName, userRole, 
               <AlertCircle className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <span className="block truncate text-lg font-bold tracking-tight text-slate-950">SafeCommunityAI</span>
+              <span className="block truncate text-lg font-bold tracking-tight text-slate-950">SafeCommunity</span>
               <span className="block truncate text-xs font-semibold uppercase tracking-wide text-red-600">{roleLabels[userRole] ?? userRole}</span>
             </div>
           </Link>

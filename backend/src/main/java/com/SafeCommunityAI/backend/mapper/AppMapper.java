@@ -7,7 +7,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class AppMapper {
     public UserResponse toUserResponse(User user) {
-        return new UserResponse(user.getId(), user.getFullName(), user.getEmail(), user.getRole(), user.getPhone(), user.isEnabled(), user.getCreatedAt());
+        return new UserResponse(
+                user.getId(),
+                user.getFullName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getPhone(),
+                user.isEnabled(),
+                user.isAccountLocked(),
+                user.getFailedLoginAttempts(),
+                user.getLastLoginAt(),
+                user.getCreatedAt()
+        );
     }
 
     public IncidentResponse toIncidentResponse(Incident incident) {

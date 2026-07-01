@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Home, Users, BarChart3, Shield, LogOut, Settings } from "lucide-react";
+import { Activity, Bell, Building2, FileBarChart, Home, LifeBuoy, Package, Settings, Shield, Siren, Users } from "lucide-react";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -26,9 +26,34 @@ export default function AdminDashboard() {
       icon: <Users className="w-5 h-5" />,
     },
     {
-      label: "Analytics",
+      label: "Incidents",
+      path: "/dashboard/admin/incidents",
+      icon: <Siren className="w-5 h-5" />,
+    },
+    {
+      label: "Responders",
+      path: "/dashboard/admin/responders",
+      icon: <LifeBuoy className="w-5 h-5" />,
+    },
+    {
+      label: "Resources",
+      path: "/dashboard/admin/resources",
+      icon: <Package className="w-5 h-5" />,
+    },
+    {
+      label: "Facilities",
+      path: "/dashboard/admin/facilities",
+      icon: <Building2 className="w-5 h-5" />,
+    },
+    {
+      label: "Notifications",
+      path: "/dashboard/admin/notifications",
+      icon: <Bell className="w-5 h-5" />,
+    },
+    {
+      label: "Reports",
       path: "/dashboard/admin/analytics",
-      icon: <BarChart3 className="w-5 h-5" />,
+      icon: <FileBarChart className="w-5 h-5" />,
     },
     {
       label: "Audit Logs",

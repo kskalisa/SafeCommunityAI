@@ -4,5 +4,6 @@ import com.SafeCommunityAI.backend.dto.*;
 
 public interface AuthService {
     AuthResponse register(RegisterRequest request);
-    AuthResponse login(LoginRequest request);
+    OtpChallengeResponse login(LoginRequest request);
+    AuthResponse verifyLoginOtp(OtpVerificationRequest request);
 }

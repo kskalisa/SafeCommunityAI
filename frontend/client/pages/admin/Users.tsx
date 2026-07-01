@@ -1,20 +1,164 @@
-import { Search, Loader2, UserCircle } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Edit3, Lock, Plus, RotateCcw, ShieldCheck, UserX } from "lucide-react";
 import { adminApi } from "@/services/api/admin";
+import { AdminButton, AdminModal, AdminPageShell, EmptyState, LoadingState, Notice, SearchInput, StatusBadge } from "@/components/admin/AdminUI";
+import type { AdminUserRequest, Role, UserResponse } from "@/types/api";
+
+const roles: Role[] = ["CITIZEN", "RESPONDER", "DISPATCHER", "ADMIN"];
+const pageSize = 8;
 
 export default function Users() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"ALL" | Role>("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const [editing, setEditing] = useState<UserResponse | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+
   const users = useQuery({ queryKey: ["admin", "users"], queryFn: adminApi.users });
-  const filtered = useMemo(() => (users.data ?? []).filter((user) => `${user.fullName} ${user.email} ${user.role}`.toLowerCase().includes(searchTerm.toLowerCase())), [users.data, searchTerm]);
+  const mutation = useMutation({
+    mutationFn: ({ id, payload }: { id?: number; payload: AdminUserRequest }) => (id ? adminApi.updateUser(id, payload) : adminApi.createUser(payload)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      setFormOpen(false);
+      setEditing(null);
+      setNotice("User record saved successfully.");
+    },
+  });
+  const statusMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { enabled?: boolean; accountLocked?: boolean; role?: Role } }) => adminApi.updateUserStatus(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      setNotice("User status updated.");
+    },
+  });
+
+  const filtered = useMemo(() => {
+    return (users.data ?? []).filter((user) => {
+      const haystack = `${user.fullName} ${user.email} ${user.role}`.toLowerCase();
+      const status = user.accountLocked ? "LOCKED" : user.enabled ? "ACTIVE" : "DISABLED";
+      return haystack.includes(search.toLowerCase()) && (roleFilter === "ALL" || user.role === roleFilter) && (statusFilter === "ALL" || status === statusFilter);
+    });
+  }, [roleFilter, search, statusFilter, users.data]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const confirmStatus = (message: string, id: number, payload: { enabled?: boolean; accountLocked?: boolean; role?: Role }) => {
+    if (window.confirm(message)) statusMutation.mutate({ id, payload });
+  };
 
   return (
-    <div className="p-5 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-8 flex justify-between items-start gap-4"><div><h1 className="text-3xl lg:text-4xl font-bold text-slate-950 mb-2">User Management</h1><p className="text-slate-600">Live user records from the backend.</p></div>{users.isFetching ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : null}</div>
-      <div className="mb-6 relative"><Search className="absolute left-4 top-3 w-5 h-5 text-slate-400" /><input type="text" placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden"><div className="overflow-x-auto"><table className="w-full"><thead className="bg-slate-50 border-b"><tr><Th>Name</Th><Th>Email</Th><Th>Role</Th><Th>Status</Th><Th>Joined</Th></tr></thead><tbody className="divide-y divide-slate-200">{filtered.map((user) => <tr key={user.id} className="hover:bg-slate-50 transition"><td className="px-6 py-4 text-sm font-semibold text-slate-950 flex items-center gap-2"><UserCircle className="w-4 h-4 text-slate-500" />{user.fullName}</td><td className="px-6 py-4 text-sm text-slate-600">{user.email}</td><td className="px-6 py-4"><Badge label={user.role} /></td><td className="px-6 py-4"><span className={`px-2.5 py-1 text-xs rounded-md font-bold ${user.enabled ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-800"}`}>{user.enabled ? "ACTIVE" : "DISABLED"}</span></td><td className="px-6 py-4 text-sm text-slate-600">{new Date(user.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table></div>{!users.isLoading && filtered.length === 0 ? <div className="p-8 text-center text-slate-500">No users found.</div> : null}</div>
-    </div>
+    <AdminPageShell
+      title="User Management"
+      description="Create users, assign roles, control access, review account activity, and respond to security issues."
+      actions={<AdminButton onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="h-4 w-4" />Add user</AdminButton>}
+    >
+      {notice ? <Notice type="success">{notice}</Notice> : null}
+      {mutation.error ? <Notice type="error">{mutation.error instanceof Error ? mutation.error.message : "Could not save user."}</Notice> : null}
+      {users.isLoading ? <LoadingState label="Loading users..." /> : null}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[1fr_12rem_12rem]">
+          <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search name, email, or role..." />
+          <select value={roleFilter} onChange={(event) => { setRoleFilter(event.target.value as "ALL" | Role); setPage(1); }} className="rounded-lg border border-slate-300 px-3 py-3 text-sm font-semibold">
+            <option value="ALL">All roles</option>
+            {roles.map((role) => <option key={role} value={role}>{role}</option>)}
+          </select>
+          <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }} className="rounded-lg border border-slate-300 px-3 py-3 text-sm font-semibold">
+            <option value="ALL">All statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="DISABLED">Disabled</option>
+            <option value="LOCKED">Locked</option>
+          </select>
+        </div>
+      </div>
+
+      <AdminModal open={formOpen} title={editing ? "Edit user" : "Add user"} description="Manage profile details, role, and access controls." onClose={() => setFormOpen(false)}>
+        <UserForm user={editing} saving={mutation.isPending} onCancel={() => setFormOpen(false)} onSave={(payload) => mutation.mutate({ id: editing?.id, payload })} />
+      </AdminModal>
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px]">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr><Th>User</Th><Th>Role</Th><Th>Status</Th><Th>Verification</Th><Th>Last Login</Th><Th>Activity</Th><Th>Actions</Th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {pageRows.map((user) => (
+                <tr key={user.id} className="transition hover:bg-slate-50">
+                  <td className="px-5 py-4"><p className="font-bold text-slate-950">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p><p className="text-xs text-slate-400">{user.phone || "No phone"}</p></td>
+                  <td className="px-5 py-4"><RoleBadge role={user.role} /></td>
+                  <td className="px-5 py-4"><StatusBadge tone={user.accountLocked ? "red" : user.enabled ? "green" : "amber"}>{user.accountLocked ? "Locked" : user.enabled ? "Active" : "Disabled"}</StatusBadge></td>
+                  <td className="px-5 py-4"><StatusBadge tone={user.role === "RESPONDER" ? "amber" : "green"}>{user.role === "RESPONDER" ? "Pending review" : "Verified"}</StatusBadge></td>
+                  <td className="px-5 py-4 text-sm text-slate-600">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "Never"}</td>
+                  <td className="px-5 py-4 text-sm text-slate-600">{user.failedLoginAttempts} failed attempts<br />Joined {new Date(user.createdAt).toLocaleDateString()}</td>
+                  <td className="px-5 py-4">
+                    <div className="flex flex-wrap gap-2">
+                      <IconButton label="Edit" onClick={() => { setEditing(user); setFormOpen(true); }} icon={<Edit3 className="h-4 w-4" />} />
+                      <IconButton label={user.accountLocked ? "Unlock" : "Lock"} onClick={() => confirmStatus(user.accountLocked ? "Unlock this account?" : "Lock this account?", user.id, { accountLocked: !user.accountLocked })} icon={user.accountLocked ? <RotateCcw className="h-4 w-4" /> : <Lock className="h-4 w-4" />} />
+                      <IconButton label={user.enabled ? "Deactivate" : "Activate"} onClick={() => confirmStatus(user.enabled ? "Deactivate this account?" : "Activate this account?", user.id, { enabled: !user.enabled })} icon={user.enabled ? <UserX className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length === 0 ? <div className="p-6"><EmptyState title="No users found" text="Adjust search or filters to find account records." /></div> : null}
+        <div className="flex items-center justify-between border-t border-slate-100 p-4 text-sm text-slate-600">
+          <span>Page {page} of {pageCount} - {filtered.length} users</span>
+          <div className="flex gap-2">
+            <AdminButton variant="secondary" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</AdminButton>
+            <AdminButton variant="secondary" disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>Next</AdminButton>
+          </div>
+        </div>
+      </div>
+    </AdminPageShell>
   );
 }
-function Badge({ label }: { label: string }) { const cls = label === "ADMIN" ? "bg-red-50 text-red-700" : label === "DISPATCHER" ? "bg-purple-50 text-purple-700" : label === "RESPONDER" ? "bg-orange-50 text-orange-700" : "bg-blue-50 text-blue-700"; return <span className={`px-2.5 py-1 text-xs rounded-md font-bold ${cls}`}>{label}</span>; }
-function Th({ children }: { children: React.ReactNode }) { return <th className="px-6 py-4 text-left text-sm font-bold text-slate-900">{children}</th>; }
+
+function UserForm({ user, saving, onCancel, onSave }: { user: UserResponse | null; saving: boolean; onCancel: () => void; onSave: (payload: AdminUserRequest) => void }) {
+  const [form, setForm] = useState<AdminUserRequest>({
+    fullName: user?.fullName ?? "",
+    email: user?.email ?? "",
+    password: "",
+    role: user?.role ?? "CITIZEN",
+    phone: user?.phone ?? "",
+    enabled: user?.enabled ?? true,
+    accountLocked: user?.accountLocked ?? false,
+  });
+  const update = (key: keyof AdminUserRequest, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    onSave({ ...form, password: form.password || undefined });
+  };
+  return (
+    <form onSubmit={submit}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Full name" value={form.fullName} onChange={(value) => update("fullName", value)} required />
+        <Field label="Email" type="email" value={form.email} onChange={(value) => update("email", value)} required />
+        <Field label={user ? "Password (optional)" : "Password"} type="password" value={form.password ?? ""} onChange={(value) => update("password", value)} required={!user} />
+        <Field label="Phone" value={form.phone ?? ""} onChange={(value) => update("phone", value)} />
+        <label className="text-sm font-bold text-slate-900">Role<select value={form.role} onChange={(event) => update("role", event.target.value as Role)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3"><option value="CITIZEN">Citizen</option><option value="RESPONDER">Responder</option><option value="DISPATCHER">Dispatcher</option><option value="ADMIN">Administrator</option></select></label>
+        <div className="grid grid-cols-2 gap-3">
+          <Toggle label="Active" checked={Boolean(form.enabled)} onChange={(value) => update("enabled", value)} />
+          <Toggle label="Locked" checked={Boolean(form.accountLocked)} onChange={(value) => update("accountLocked", value)} />
+        </div>
+      </div>
+      {form.role === "RESPONDER" ? <div className="mt-4 grid gap-4 md:grid-cols-3"><Field label="Organization" value={form.organization ?? ""} onChange={(value) => update("organization", value)} /><Field label="Certification" value={form.certificationLicense ?? ""} onChange={(value) => update("certificationLicense", value)} /><Field label="Vehicle" value={form.vehicleNumber ?? ""} onChange={(value) => update("vehicleNumber", value)} /></div> : null}
+      <div className="mt-5 flex justify-end gap-2"><AdminButton variant="secondary" onClick={onCancel}>Cancel</AdminButton><AdminButton type="submit" disabled={saving}>{saving ? "Saving..." : "Save user"}</AdminButton></div>
+    </form>
+  );
+}
+
+function RoleBadge({ role }: { role: Role }) {
+  return <StatusBadge tone={role === "ADMIN" ? "red" : role === "DISPATCHER" ? "purple" : role === "RESPONDER" ? "amber" : "blue"}>{role}</StatusBadge>;
+}
+function Th({ children }: { children: React.ReactNode }) { return <th className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">{children}</th>; }
+function IconButton({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick: () => void }) { return <button onClick={onClick} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700">{icon}{label}</button>; }
+function Field({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) { return <label className="text-sm font-bold text-slate-900">{label}<input type={type} value={value} onChange={(event) => onChange(event.target.value)} required={required} minLength={type === "password" && required ? 6 : undefined} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" /></label>; }
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) { return <label className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-3 text-sm font-bold text-slate-900"><span>{label}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4" /></label>; }

@@ -18,7 +18,12 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+    public OtpChallengeResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/login/verify-otp")
+    public AuthResponse verifyLoginOtp(@Valid @RequestBody OtpVerificationRequest request) {
+        return authService.verifyLoginOtp(request);
     }
 }

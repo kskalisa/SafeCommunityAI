@@ -28,6 +28,18 @@ export interface RegisterRequest extends LoginRequest {
   vehicleNumber?: string;
 }
 
+export interface OtpChallengeResponse {
+  otpRequired: boolean;
+  email: string;
+  expiresInSeconds: number;
+  message: string;
+}
+
+export interface OtpVerificationRequest {
+  email: string;
+  otpCode: string;
+}
+
 export interface UserResponse {
   id: number;
   fullName: string;
@@ -35,7 +47,23 @@ export interface UserResponse {
   role: Role;
   phone?: string;
   enabled: boolean;
+  accountLocked: boolean;
+  failedLoginAttempts: number;
+  lastLoginAt?: string;
   createdAt: string;
+}
+
+export interface AdminUserRequest {
+  fullName: string;
+  email: string;
+  password?: string;
+  role: Role;
+  phone?: string;
+  enabled?: boolean;
+  accountLocked?: boolean;
+  organization?: string;
+  certificationLicense?: string;
+  vehicleNumber?: string;
 }
 
 export interface ResponderDetailResponse extends UserResponse {

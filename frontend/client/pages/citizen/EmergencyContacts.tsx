@@ -5,9 +5,9 @@ import { emergencyContactsApi } from "@/services/api/emergencyContacts";
 import type { EmergencyContactRequest, EmergencyContactResponse } from "@/types/api";
 
 const hotlines = [
-  { name: "Police", phone: "999", detail: "Immediate safety concerns", tone: "red" },
-  { name: "Ambulance", phone: "999", detail: "Medical emergencies", tone: "emerald" },
-  { name: "Fire", phone: "999", detail: "Fire or smoke danger", tone: "amber" },
+  { name: "Police", phone: "112", detail: "Immediate safety concerns", tone: "red" },
+  { name: "Ambulance", phone: "911", detail: "Medical emergencies", tone: "emerald" },
+  { name: "Fire", phone: "111", detail: "Fire or smoke danger", tone: "amber" },
 ];
 
 const emptyForm: EmergencyContactRequest = { name: "", type: "family", phone: "", email: "", notifyOnEmergency: true };

@@ -1,12 +1,21 @@
 import { useEffect } from "react";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Home, AlertCircle, MapPin, Users, BarChart3, MessageCircle, Hospital } from "lucide-react";
+import { incidentsApi } from "@/services/api/incidents";
 
 export default function DispatcherDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const userRole = sessionStorage.getItem("userRole");
+  const queue = useQuery({
+    queryKey: ["incidents", "queue"],
+    queryFn: incidentsApi.queue,
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+  const queueCount = queue.data?.length ?? 0;
 
   useEffect(() => {
     if (userRole !== "dispatcher") {
@@ -19,13 +28,12 @@ export default function DispatcherDashboard() {
       label: "Dashboard",
       path: "/dashboard/dispatcher",
       icon: <Home className="w-5 h-5" />,
-      badge: 2,
     },
     {
       label: "Incident Queue",
       path: "/dashboard/dispatcher/queue",
       icon: <AlertCircle className="w-5 h-5" />,
-      badge: 5,
+      badge: queueCount,
     },
     {
       label: "Map View",

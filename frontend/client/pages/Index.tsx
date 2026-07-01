@@ -83,7 +83,7 @@ export default function Index() {
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-red-600">
               <AlertCircle className="h-6 w-6" />
             </span>
-            <span className="text-xl font-bold text-white">SafeCommunityAI</span>
+            <span className="text-xl font-bold text-white">SafeCommunity</span>
           </a>
           <div className="hidden items-center gap-8 md:flex">
             <a href="#platform" className="text-sm font-medium text-slate-200 transition hover:text-white">How it helps</a>
@@ -106,7 +106,7 @@ export default function Index() {
               Help reaches the right people faster
             </div>
             <h1 className="text-5xl font-bold leading-tight text-white sm:text-6xl lg:text-7xl">
-              SafeCommunityAI
+              SafeCommunity
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-100 sm:text-xl">
               A friendly emergency response app that helps people call for help, share their location, and keep responders and dispatchers on the same page.
@@ -138,7 +138,7 @@ export default function Index() {
               <p className="text-sm font-bold uppercase tracking-wide text-red-600">How it helps</p>
               <h2 className="mt-3 text-4xl font-bold text-slate-950">Made for the moments when every second matters</h2>
               <p className="mt-4 text-lg leading-8 text-slate-600">
-                SafeCommunityAI keeps the steps simple: ask for help, share the location, send the right team, and keep everyone updated.
+                SafeCommunity keeps the steps simple: ask for help, share the location, send the right team, and keep everyone updated.
               </p>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -279,11 +279,11 @@ export default function Index() {
               <AlertCircle className="h-5 w-5" />
             </span>
             <div>
-              <p className="font-bold text-slate-950">SafeCommunityAI</p>
+              <p className="font-bold text-slate-950">SafeCommunity</p>
               <p className="text-sm text-slate-500">Helping communities respond with care.</p>
             </div>
           </div>
-          <p className="text-sm text-slate-500">2026 SafeCommunityAI. Built for safer communities.</p>
+          <p className="text-sm text-slate-500">2026 SafeCommunity. Built for safer communities.</p>
         </div>
       </footer>
     </div>

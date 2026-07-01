@@ -36,6 +36,11 @@ import AdminUsers from "./pages/admin/Users";
 import AdminAnalytics from "./pages/admin/Analytics";
 import AdminAuditLogs from "./pages/admin/AuditLogs";
 import AdminSettings from "./pages/admin/Settings";
+import AdminIncidents from "./pages/admin/Incidents";
+import AdminResponders from "./pages/admin/Responders";
+import AdminResources from "./pages/admin/Resources";
+import AdminFacilities from "./pages/admin/Facilities";
+import AdminNotifications from "./pages/admin/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -85,6 +90,11 @@ const App = () => (
           <Route path="/dashboard/admin" element={<AdminDashboard />}>
             <Route index element={<AdminDashboardPage />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="incidents" element={<AdminIncidents />} />
+            <Route path="responders" element={<AdminResponders />} />
+            <Route path="resources" element={<AdminResources />} />
+            <Route path="facilities" element={<AdminFacilities />} />
+            <Route path="notifications" element={<AdminNotifications />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="audit" element={<AdminAuditLogs />} />
             <Route path="settings" element={<AdminSettings />} />

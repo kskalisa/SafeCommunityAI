@@ -89,7 +89,7 @@ export default function Reports() {
   };
 
   const exportPdf = () => {
-    printPdf(`SafeCommunityAI - ${reportTitle}`, [
+    printPdf(`SafeCommunity - ${reportTitle}`, [
       {
         heading: "Report Summary",
         rows: [

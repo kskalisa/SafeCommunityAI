@@ -1,6 +1,6 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { authApi } from "@/services/api/auth";
 import { dashboardPathForRole } from "@/routes/paths";
 import { useAuth } from "@/context/AuthContext";
@@ -13,35 +13,50 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpMessage, setOtpMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const demoAccounts = [
-    { role: "Citizen", email: "citizen@demo.com", password: "demo123", note: "Send alerts and track help" },
-    { role: "Responder", email: "responder@demo.com", password: "demo123", note: "Accept calls and share progress" },
-    { role: "Dispatcher", email: "dispatcher@demo.com", password: "demo123", note: "View map and assign teams" },
-    { role: "Admin", email: "admin@demo.com", password: "demo123", note: "Review people and activity" },
-  ];
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const requestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      const auth = await authApi.login({ email, password });
-      setAuth(auth);
-      navigate(dashboardPathForRole(auth.role));
+      const challenge = await authApi.login({ email, password });
+      setOtpSent(challenge.otpRequired);
+      setOtpMessage(challenge.message);
+      setOtpCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "We could not sign you in. Please check your email and password.");
+      setError(err instanceof Error ? err.message : "We could not verify your email and password.");
     } finally {
       setLoading(false);
     }
   };
 
-  const fillDemo = (demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
+  const verifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const auth = await authApi.verifyOtp({ email, otpCode });
+      setAuth(auth);
+      navigate(dashboardPathForRole(auth.role));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The OTP is invalid or expired.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const editCredentials = () => {
+    setOtpSent(false);
+    setOtpCode("");
+    setOtpMessage("");
+    setError("");
   };
 
   return (
@@ -58,10 +73,10 @@ export default function Login() {
             <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg bg-red-600">
               <AlertCircle className="h-7 w-7" />
             </div>
-            <h1 className="text-5xl font-bold leading-tight">Welcome back to SafeCommunityAI</h1>
-            <p className="mt-5 text-lg leading-8 text-slate-100">Sign in to continue helping your community respond quickly and safely.</p>
+            <h1 className="text-5xl font-bold leading-tight">Welcome back to SafeCommunity</h1>
+            <p className="mt-5 text-lg leading-8 text-slate-100">Sign in securely to coordinate reports, resources, and emergency response work.</p>
             <div className="mt-8 grid gap-3">
-              {["Live emergency map", "Clear role dashboards", "Fast phone alerts"].map((item) => (
+              {["Protected role dashboards", "Email one-time password", "Audited emergency activity"].map((item) => (
                 <div key={item} className="flex items-center gap-3 rounded-lg border border-white/20 bg-white/10 p-3 backdrop-blur">
                   <CheckCircle2 className="h-5 w-5 text-emerald-300" />
                   <span className="font-medium">{item}</span>
@@ -79,57 +94,75 @@ export default function Login() {
               <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-red-600 text-white">
                 <AlertCircle className="h-6 w-6" />
               </div>
-              <span className="text-2xl font-bold text-slate-950">SafeCommunityAI</span>
+              <span className="text-2xl font-bold text-slate-950">SafeCommunity</span>
             </Link>
-            <h2 className="text-3xl font-bold text-slate-950">Sign in</h2>
-            <p className="mt-2 text-slate-600">Choose a demo role below or use your own account.</p>
+            <h2 className="text-3xl font-bold text-slate-950">{otpSent ? "Enter OTP" : "Sign in"}</h2>
+            <p className="mt-2 text-slate-600">
+              {otpSent ? `We sent a one-time password to ${email}.` : "Use your account credentials to receive a one-time password by email."}
+            </p>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-            <form onSubmit={handleLogin} className="space-y-5">
-              <Field label="Email address" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
+          <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm lg:p-7">
+            {!otpSent ? (
+              <form onSubmit={requestOtp} className="space-y-5">
+                <Field label="Email address" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
 
-              <div>
-                <label htmlFor="password" className="block text-sm font-semibold text-slate-900">Password</label>
-                <div className="relative mt-2">
-                  <input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full rounded-lg border border-slate-300 px-4 py-3 pr-12 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100" required />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-500 transition hover:text-slate-800" aria-label="Show or hide password">
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
+                <div>
+                  <label htmlFor="password" className="block text-sm font-semibold text-slate-900">Password</label>
+                  <div className="relative mt-2">
+                    <input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" className="w-full rounded-lg border border-slate-300 px-4 py-3 pr-12 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100" required />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-500 transition hover:text-slate-800" aria-label="Show or hide password">
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {error ? (
-                <div className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
-                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              ) : null}
+                {error ? <ErrorMessage message={error} /> : null}
 
-              <button type="submit" disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-3 font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
-                <ShieldCheck className="h-4 w-4" />
-                {loading ? "Signing in..." : "Sign in"}
-              </button>
-            </form>
-          </div>
-
-          <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="mb-3 text-sm font-bold text-slate-950">Try a demo role</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {demoAccounts.map((account) => (
-                <button key={account.role} onClick={() => fillDemo(account.email, account.password)} className="rounded-lg border border-slate-200 p-3 text-left transition hover:border-red-300 hover:bg-red-50">
-                  <div className="font-semibold text-slate-950">{account.role}</div>
-                  <div className="mt-1 text-xs text-slate-500">{account.note}</div>
+                <button type="submit" disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-3 font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
+                  <Mail className="h-4 w-4" />
+                  {loading ? "Checking credentials..." : "Continue"}
                 </button>
-              ))}
-            </div>
-          </section>
+              </form>
+            ) : (
+              <form onSubmit={verifyOtp} className="space-y-5">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{otpMessage}</div>
+
+                <div>
+                  <label htmlFor="otp-code" className="block text-sm font-semibold text-slate-900">One-time password</label>
+                  <div className="relative mt-2">
+                    <input id="otp-code" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit OTP" className="w-full rounded-lg border border-slate-300 px-4 py-3 pr-12 tracking-[0.25em] outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100" required />
+                    <KeyRound className="absolute right-3 top-3 h-5 w-5 text-slate-500" />
+                  </div>
+                </div>
+
+                {error ? <ErrorMessage message={error} /> : null}
+
+                <button type="submit" disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 py-3 font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
+                  <ShieldCheck className="h-4 w-4" />
+                  {loading ? "Verifying OTP..." : "Verify and sign in"}
+                </button>
+                <button type="button" onClick={editCredentials} className="w-full rounded-lg border border-slate-300 py-3 font-semibold text-slate-700 transition hover:bg-slate-50">
+                  Use a different email
+                </button>
+              </form>
+            )}
+          </div>
 
           <div className="mt-6 text-center text-sm text-slate-600">
             <p>New here? <Link to="/register" className="font-semibold text-red-600 hover:text-red-700">Create an account</Link></p>
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+function ErrorMessage({ message }: { message: string }) {
+  return (
+    <div className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+      <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+      <p className="text-sm text-red-700">{message}</p>
     </div>
   );
 }

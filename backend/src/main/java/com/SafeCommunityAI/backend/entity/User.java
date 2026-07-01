@@ -3,6 +3,7 @@ package com.SafeCommunityAI.backend.entity;
 import com.SafeCommunityAI.backend.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -37,9 +38,26 @@ public class User implements UserDetails {
     private Role role;
 
     private String phone;
-    private boolean enabled;
+    @Builder.Default
+    @Column(nullable = false)
+    @ColumnDefault("true")
+    private boolean enabled = true;
+
+    @Column(nullable = false)
+    @ColumnDefault("false")
     private boolean locationPrivacyConsent;
+
+    @Column(nullable = false)
+    @ColumnDefault("false")
+    private boolean accountLocked;
+
+    private String loginOtpHash;
+    private Instant loginOtpExpiresAt;
+
+    @Column(nullable = false)
+    @ColumnDefault("0")
     private int failedLoginAttempts;
+
     private Instant lastLoginAt;
     private Instant createdAt;
     private Instant updatedAt;
@@ -48,7 +66,6 @@ public class User implements UserDetails {
     void onCreate() {
         createdAt = Instant.now();
         updatedAt = createdAt;
-        enabled = true;
     }
 
     @PreUpdate
@@ -64,5 +81,10 @@ public class User implements UserDetails {
     @Override
     public String getUsername() {
         return email;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return !accountLocked;
     }
 }
