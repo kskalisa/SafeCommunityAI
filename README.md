@@ -1,4 +1,4 @@
-﻿# SafeCommunityAI
+# SafeCommunityAI
 
 SafeCommunityAI is a role-based emergency reporting and response platform with a React/Vite frontend and Spring Boot/PostgreSQL backend.
 
@@ -117,3 +117,19 @@ cd ..\frontend
 npm run typecheck
 npm run build:client
 ```
+## Local ML Triage
+
+Incident priority triage runs locally in the Spring Boot backend. It does not need an OpenAI key, paid API, or network call.
+
+The backend trains a lightweight Naive Bayes classifier from built-in emergency examples when the app starts. When an incident is created or edited, the classifier looks at the incident type, severity, description keywords, GPS availability, witness details, and evidence attachments. It blends that prediction with the built-in safety rule scorer, then stores:
+
+- `aiSource=LOCAL_ML`
+- `aiModel=local-naive-bayes-v1`
+- `priority`
+- `priorityScore`
+- `aiConfidenceScore`
+- `aiExplanation`
+- `resourceSuggestion`
+
+Dispatcher and admin screens show the local ML triage result for human review. The rule scorer remains as a safety baseline inside the local model flow.
+

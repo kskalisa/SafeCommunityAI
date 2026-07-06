@@ -40,6 +40,10 @@ public class Incident {
     @Column(length = 1000)
     private String aiExplanation;
     private String resourceSuggestion;
+    private String aiSource;
+    private String aiModel;
+    @Column(length = 500)
+    private String aiFallbackReason;
     private String severity;
     private BigDecimal latitude;
     private BigDecimal longitude;

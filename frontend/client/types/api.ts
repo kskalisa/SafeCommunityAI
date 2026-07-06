@@ -1,4 +1,4 @@
-﻿export type Role = "CITIZEN" | "RESPONDER" | "DISPATCHER" | "ADMIN";
+export type Role = "CITIZEN" | "RESPONDER" | "DISPATCHER" | "ADMIN";
 export type IncidentType = "MEDICAL" | "FIRE" | "ACCIDENT" | "CRIME" | "NATURAL_DISASTER" | "OTHER";
 export type IncidentStatus = "PENDING" | "PRIORITIZED" | "ASSIGNED" | "EN_ROUTE" | "ON_SCENE" | "RESOLVED" | "CANCELLED";
 export type PriorityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
@@ -84,6 +84,9 @@ export interface IncidentResponse {
   aiConfidenceScore: number;
   aiExplanation?: string;
   resourceSuggestion?: string;
+  aiSource?: string;
+  aiModel?: string;
+  aiFallbackReason?: string;
   severity?: string;
   latitude?: number;
   longitude?: number;
@@ -95,6 +98,13 @@ export interface IncidentResponse {
   emergencyContactsNotified: boolean;
   attachments: AttachmentResponse[];
   reporterName: string;
+  assignmentId?: number;
+  assignedResponderId?: number;
+  assignedResponderName?: string;
+  assignedResponderEmail?: string;
+  responderStatus?: ResponderStatus;
+  etaMinutes?: number;
+  assignedAt?: string;
   reportedAt: string;
   resolvedAt?: string;
 }

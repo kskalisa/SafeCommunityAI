@@ -38,8 +38,9 @@ import { resourcesApi } from "@/services/api/resources";
 import { downloadCsv } from "@/lib/export";
 import type { AnalyticsResponse, AuditLogResponse, IncidentResponse, IncidentStatus, PriorityLevel, ResourceResponse, UserResponse } from "@/types/api";
 
-type SortKey = "referenceNumber" | "type" | "priority" | "status" | "reporterName" | "reportedAt" | "aiConfidenceScore";
+type SortKey = "referenceNumber" | "type" | "priority" | "status" | "reporterName" | "assignedResponderName" | "reportedAt" | "aiConfidenceScore";
 type SortDirection = "asc" | "desc";
+type IncidentReportFilter = "ALL" | "OPEN" | "ASSIGNED" | "UNASSIGNED" | "RESOLVED";
 type ExportOptions = {
   summary: boolean;
   incidents: boolean;
@@ -65,6 +66,7 @@ type RealStats = {
 
 const colors = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"];
 const label = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+const aiSourceLabel = (incident: IncidentResponse) => incident.aiSource === "LOCAL_ML" ? `Local ML${incident.aiModel ? ` (${incident.aiModel})` : ""}` : "Rule-based triage";
 const percent = (count: number, total: number) => Math.round((count / Math.max(1, total)) * 100);
 
 const emptyAnalytics: AnalyticsResponse = {
@@ -97,12 +99,20 @@ const timeOptions = [
   { value: 90, label: "90 days" },
   { value: 365, label: "1 year" },
 ];
+const incidentReportFilterOptions: Array<{ value: IncidentReportFilter; label: string }> = [
+  { value: "ALL", label: "All Incident Reports" },
+  { value: "OPEN", label: "Open Incident Reports" },
+  { value: "ASSIGNED", label: "Assigned Incident Reports" },
+  { value: "UNASSIGNED", label: "Unassigned Incident Reports" },
+  { value: "RESOLVED", label: "Resolved Incident Reports" },
+];
 
 export default function Analytics() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"ALL" | IncidentStatus>("ALL");
   const [priority, setPriority] = useState<"ALL" | PriorityLevel>("ALL");
   const [days, setDays] = useState(0);
+  const [incidentReportFilter, setIncidentReportFilter] = useState<IncidentReportFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("reportedAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
@@ -146,10 +156,10 @@ export default function Analytics() {
   const filteredIncidents = useMemo(() => {
     const query = search.toLowerCase();
     return allIncidents.filter((incident) => {
-      const text = `${incident.referenceNumber} ${incident.type} ${incident.status} ${incident.priority} ${incident.reporterName} ${incident.manualLocation ?? ""} ${incident.description ?? ""}`.toLowerCase();
-      return text.includes(query) && (!since || new Date(incident.reportedAt) >= since) && (status === "ALL" || incident.status === status) && (priority === "ALL" || incident.priority === priority);
+      const text = `${incident.referenceNumber} ${incident.type} ${incident.status} ${incident.priority} ${incident.reporterName} ${incident.assignedResponderName ?? ""} ${incident.assignedResponderEmail ?? ""} ${incident.responderStatus ?? ""} ${incident.manualLocation ?? ""} ${incident.description ?? ""}`.toLowerCase();
+      return text.includes(query) && matchesIncidentReportFilter(incident, incidentReportFilter) && (!since || new Date(incident.reportedAt) >= since) && (status === "ALL" || incident.status === status) && (priority === "ALL" || incident.priority === priority);
     });
-  }, [allIncidents, priority, search, since, status]);
+  }, [allIncidents, incidentReportFilter, priority, search, since, status]);
 
   const filteredUsers = useMemo(() => users.filter((user) => `${user.fullName} ${user.email} ${user.role}`.toLowerCase().includes(search.toLowerCase()) && (!since || new Date(user.createdAt) >= since)), [search, since, users]);
   const filteredLogs = useMemo(() => logs.filter((log) => `${log.action} ${log.actorEmail} ${log.detail ?? ""}`.toLowerCase().includes(search.toLowerCase()) && (!since || new Date(log.createdAt) >= since)), [logs, search, since]);
@@ -178,6 +188,7 @@ export default function Analytics() {
     setStatus("ALL");
     setPriority("ALL");
     setDays(0);
+    setIncidentReportFilter("ALL");
     setPage(1);
   };
 
@@ -199,6 +210,7 @@ export default function Analytics() {
         `Status: ${status === "ALL" ? "All" : label(status)}`,
         `Priority: ${priority === "ALL" ? "All" : label(priority)}`,
         `Range: ${timeOptions.find((option) => option.value === days)?.label ?? "All time"}`,
+        `Incident Report: ${incidentReportFilterOptions.find((option) => option.value === incidentReportFilter)?.label ?? "All Incident Reports"}`,
       ],
     });
     setExportOpen(false);
@@ -251,11 +263,11 @@ export default function Analytics() {
       ) : null}
 
       <section className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
-        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1.4fr)_170px_170px_150px_auto_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1.5fr)_160px_160px_150px_auto_auto]">
           <label className="relative block">
             <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Search</span>
             <Search className="absolute left-3 top-8 h-4 w-4 text-slate-400" />
-            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search reference, reporter, category, location..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search reference, reporter, responder, category, location..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
           </label>
           <FilterSelect labelText="Status" value={status} onChange={(value) => { setStatus(value as "ALL" | IncidentStatus); setPage(1); }} options={statusOptions} />
           <FilterSelect labelText="Priority" value={priority} onChange={(value) => { setPriority(value as "ALL" | PriorityLevel); setPage(1); }} options={priorityOptions} />
@@ -281,7 +293,7 @@ export default function Analytics() {
         <MetricCard title="Total Users" value={realStats.userCount} helper={`${filteredUsers.length} match filters`} icon={<Users className="h-5 w-5" />} tone="blue" />
         <MetricCard title="Active Responders" value={realStats.activeResponders} helper="Enabled responder accounts" icon={<ShieldCheck className="h-5 w-5" />} tone="green" />
         <MetricCard title="Resources Available" value={realStats.availableResources} helper={`${resources.length} total resources`} icon={<BarChart3 className="h-5 w-5" />} tone="green" />
-        <MetricCard title="AI Confidence" value={`${confidencePct}%`} helper="Average from incident records" icon={<Sparkles className="h-5 w-5" />} tone="purple" />
+        <MetricCard title="AI Confidence" value={`${confidencePct}%`} helper="Average from AI or fallback triage records" icon={<Sparkles className="h-5 w-5" />} tone="purple" />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -315,10 +327,7 @@ export default function Analytics() {
         </Panel>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <Panel title="Priority Breakdown" subtitle="Real priority totals">
-          {chartData.priority.length ? <SimpleBarChart data={chartData.priority} color="#f59e0b" /> : <EmptyBlock text="No priority data is available yet." />}
-        </Panel>
+      <section className="grid gap-6 lg:grid-cols-2">
         <Panel title="Users by Role" subtitle="Real user totals by role">
           {chartData.roles.length ? <SimpleBarChart data={chartData.roles} color="#2563eb" /> : <EmptyBlock text="No user role data is available yet." />}
         </Panel>
@@ -327,7 +336,7 @@ export default function Analytics() {
         </Panel>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+      <section className="grid gap-6">
         <Panel title="AI Insights" subtitle="Generated only from live analytics values">
           <div className="space-y-3">
             {insights.length ? insights.map((insight) => <div key={insight} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700">{insight}</div>) : <EmptyBlock text="No insights can be generated until more data is available." />}
@@ -338,18 +347,21 @@ export default function Analytics() {
             <EmptyReports onReset={resetFilters} />
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-500">{selectedRows.length} selected. Export actions use selected rows first.</p>
-                <div className="flex gap-2">
-                  <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Export rows" variant="secondary" />
-                  <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="PDF rows" variant="secondary" />
+              <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,320px)_1fr] lg:items-end">
+                <FilterSelect labelText="Incident Report" value={incidentReportFilter} onChange={(value) => { setIncidentReportFilter(value as IncidentReportFilter); setPage(1); }} options={incidentReportFilterOptions.map((option) => option.value)} display={(value) => incidentReportFilterOptions.find((option) => option.value === value)?.label ?? value} />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-slate-500">{selectedRows.length} selected. Export actions use selected rows first.</p>
+                  <div className="flex gap-2">
+                    <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Export rows" variant="secondary" />
+                    <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="PDF rows" variant="secondary" />
+                  </div>
                 </div>
               </div>
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[980px] border-separate border-spacing-0">
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full table-fixed border-separate border-spacing-0">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="w-12 border-b border-slate-200 px-4 py-3 text-left">
+                      <th className="w-10 border-b border-slate-200 px-3 py-3 text-left">
                         <input type="checkbox" checked={pagedIncidents.length > 0 && pagedIncidents.every((incident) => selectedRows.includes(incident.id))} onChange={(event) => setSelectedRows(event.target.checked ? Array.from(new Set([...selectedRows, ...pagedIncidents.map((incident) => incident.id)])) : selectedRows.filter((id) => !pagedIncidents.some((incident) => incident.id === id)))} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
                       </th>
                       <SortableTh text="Reference" sortKey="referenceNumber" active={sortKey} direction={sortDirection} onSort={toggleSort} />
@@ -357,25 +369,38 @@ export default function Analytics() {
                       <SortableTh text="Priority" sortKey="priority" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <SortableTh text="Status" sortKey="status" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <SortableTh text="Reporter" sortKey="reporterName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Assigned responder" sortKey="assignedResponderName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <Th>Location</Th>
                       <SortableTh text="Created" sortKey="reportedAt" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <Th>AI Source</Th>
                       <SortableTh text="AI Confidence" sortKey="aiConfidenceScore" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                     </tr>
                   </thead>
                   <tbody>
                     {pagedIncidents.map((incident) => (
                       <tr key={incident.id} className="hover:bg-blue-50/40">
-                        <td className="border-b border-slate-100 px-4 py-4">
+                        <td className="border-b border-slate-100 px-3 py-3">
                           <input type="checkbox" checked={selectedRows.includes(incident.id)} onChange={(event) => setSelectedRows(event.target.checked ? [...selectedRows, incident.id] : selectedRows.filter((id) => id !== incident.id))} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
                         </td>
-                        <td className="border-b border-slate-100 px-4 py-4 font-bold text-slate-950">{incident.referenceNumber}</td>
-                        <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-600">{label(incident.type)}</td>
-                        <td className="border-b border-slate-100 px-4 py-4"><Badge tone={priorityTone(incident.priority)}>{label(incident.priority)}</Badge></td>
-                        <td className="border-b border-slate-100 px-4 py-4"><Badge tone={statusTone(incident.status)}>{label(incident.status)}</Badge></td>
-                        <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-600">{incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen"}</td>
-                        <td className="max-w-56 truncate border-b border-slate-100 px-4 py-4 text-sm text-slate-600">{incident.manualLocation || "GPS coordinates"}</td>
-                        <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td>
-                        <td className="border-b border-slate-100 px-4 py-4 text-sm font-bold text-purple-700">{Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</td>
+                        <td className="border-b border-slate-100 px-3 py-3 font-bold text-slate-950">{incident.referenceNumber}</td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{label(incident.type)}</td>
+                        <td className="border-b border-slate-100 px-3 py-3"><Badge tone={priorityTone(incident.priority)}>{label(incident.priority)}</Badge></td>
+                        <td className="border-b border-slate-100 px-3 py-3"><Badge tone={statusTone(incident.status)}>{label(incident.status)}</Badge></td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen"}</td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm text-slate-600">
+                          {incident.assignedResponderName ? (
+                            <div>
+                              <p className="font-bold text-slate-800">{incident.assignedResponderName}</p>
+                              <p className="mt-1 text-xs text-slate-500">{incident.responderStatus ? label(incident.responderStatus) : "Assigned"}{incident.etaMinutes ? ` - ETA ${incident.etaMinutes} min` : ""}</p>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="break-words border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{incident.manualLocation || "GPS coordinates"}</td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm font-semibold text-slate-700">{aiSourceLabel(incident)}</td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm font-bold text-purple-700">{Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -407,6 +432,13 @@ export default function Analytics() {
   );
 }
 
+function matchesIncidentReportFilter(incident: IncidentResponse, filter: IncidentReportFilter) {
+  if (filter === "ALL") return true;
+  if (filter === "OPEN") return isActiveIncident(incident.status);
+  if (filter === "ASSIGNED") return Boolean(incident.assignmentId || incident.assignedResponderName);
+  if (filter === "UNASSIGNED") return !incident.assignmentId && !incident.assignedResponderName;
+  return incident.status === "RESOLVED";
+}
 function buildRealStats(incidents: IncidentResponse[], users: UserResponse[], resources: ResourceResponse[], analytics: AnalyticsResponse): RealStats {
   const confidenceScores = incidents.map((incident) => incident.aiConfidenceScore).filter((score): score is number => typeof score === "number");
   const hasIncidents = incidents.length > 0;
@@ -448,7 +480,7 @@ function buildInsightsFromRecords(realStats: RealStats, filteredStats: RealStats
   if (filteredStats.pendingIncidentQueue > 0) insights.push(`${filteredStats.pendingIncidentQueue} filtered incident${filteredStats.pendingIncidentQueue === 1 ? "" : "s"} are still pending or prioritized.`);
   if (topStatus) insights.push(`${topStatus.name} is currently the largest status group in the report grid.`);
   if (realStats.activeResponders > 0) insights.push(`${realStats.activeResponders} enabled responder account${realStats.activeResponders === 1 ? "" : "s"} are available in user records.`);
-  if (realStats.aiAverageConfidence > 0) insights.push(`Average AI confidence across loaded incidents is ${realStats.aiAverageConfidence}%.`);
+  if (realStats.aiAverageConfidence > 0) insights.push(`Average triage confidence across loaded incidents is ${realStats.aiAverageConfidence}%.`);
   return insights;
 }
 
@@ -473,8 +505,12 @@ function incidentExportRows(incidents: IncidentResponse[]) {
     priority: label(incident.priority),
     status: label(incident.status),
     reporter: incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen",
+    assignedResponder: incident.assignedResponderName || "Unassigned",
+    responderStatus: incident.responderStatus ? label(incident.responderStatus) : "",
+    etaMinutes: incident.etaMinutes ?? "",
     location: incident.manualLocation || "GPS coordinates",
     created: new Date(incident.reportedAt).toLocaleString(),
+    aiSource: aiSourceLabel(incident),
     aiConfidence: `${Math.round((incident.aiConfidenceScore ?? 0) * 100)}%`,
   }));
 }
@@ -491,8 +527,8 @@ function buildPdfSections(options: ExportOptions, stats: RealStats, users: UserR
   if (options.incidents) {
     sections.push({
       title: options.selectedOnly && incidents.length ? "Selected Incident Rows" : "Filtered Incident Rows",
-      headers: ["Reference", "Category", "Priority", "Status", "Reporter", "Location", "Created", "AI"],
-      rows: incidentExportRows(incidents).map((row) => [row.reference, row.category, row.priority, row.status, row.reporter, row.location, row.created, row.aiConfidence]),
+      headers: ["Reference", "Category", "Priority", "Status", "Reporter", "Responder", "Location", "Created", "AI"],
+      rows: incidentExportRows(incidents).map((row) => [row.reference, row.category, row.priority, row.status, row.reporter, row.assignedResponder, row.location, row.created, row.aiConfidence]),
     });
   }
   if (options.users) {
@@ -614,6 +650,7 @@ function makePdf(title: string, sections: PdfSection[], meta: { filters: string[
     if (headers.length === 5) return [145, 205, 80, 90, 120];
     if (headers.length === 4) return [190, 220, 140, 150];
     if (headers.length === 8) return [100, 72, 62, 82, 96, 132, 118, 42];
+    if (headers.length === 9) return [82, 65, 55, 70, 82, 104, 92, 92, 32];
     return headers.map(() => contentWidth / Math.max(1, headers.length));
   };
 
@@ -813,14 +850,14 @@ function EmptyReports({ onReset }: { onReset: () => void }) {
 
 function SortableTh({ text, sortKey, active, direction, onSort }: { text: string; sortKey: SortKey; active: SortKey; direction: SortDirection; onSort: (key: SortKey) => void }) {
   return (
-    <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">
-      <button onClick={() => onSort(sortKey)} className="inline-flex items-center gap-1 hover:text-slate-950">{text}{active === sortKey ? direction === "asc" ? " up" : " down" : null}</button>
+    <th className="border-b border-slate-200 px-3 py-3 text-left text-[11px] font-bold uppercase text-slate-500">
+      <button onClick={() => onSort(sortKey)} className="inline-flex max-w-full items-center gap-1 whitespace-normal text-left leading-tight hover:text-slate-950">{text}{active === sortKey ? direction === "asc" ? " up" : " down" : null}</button>
     </th>
   );
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="border-b border-slate-200 px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">{children}</th>;
+  return <th className="border-b border-slate-200 px-3 py-3 text-left text-[11px] font-bold uppercase text-slate-500">{children}</th>;
 }
 
 function Badge({ children, tone }: { children: React.ReactNode; tone: "green" | "red" | "orange" | "blue" | "purple" | "slate" }) {

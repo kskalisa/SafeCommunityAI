@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { Clock, LocateFixed, MapPin, Navigation, ShieldCheck } from "lucide-react";
-import RealTimeMap, { type MapMarker, type MapRoute } from "@/components/maps/RealTimeMap";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Clock, ExternalLink, LocateFixed, Navigation, ShieldCheck } from "lucide-react";
+import RealTimeMap, { type MapMarker } from "@/components/maps/RealTimeMap";
 import { dispatchApi } from "@/services/api/dispatch";
 import { locationsApi } from "@/services/api/locations";
 import type { AssignmentResponse } from "@/types/api";
@@ -9,15 +9,19 @@ const label = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(
 
 export default function Map() {
   const [assignments, setAssignments] = useState<AssignmentResponse[]>([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [route, setRoute] = useState<{ distanceKm: number; etaMinutes: number; instructions: string[]; route: MapRoute } | null>(null);
 
   useEffect(() => {
     dispatchApi.mine()
-      .then(setAssignments)
+      .then((items) => {
+        setAssignments(items);
+        const firstActive = items.find((assignment) => !["COMPLETED", "OFFLINE"].includes(assignment.responderStatus));
+        setSelectedAssignmentId(firstActive?.id ?? items[0]?.id ?? null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -25,49 +29,19 @@ export default function Map() {
     locateAndShare(false);
   }, []);
 
-  const active = useMemo(
-    () => assignments.find((assignment) => !["COMPLETED", "OFFLINE"].includes(assignment.responderStatus)) ?? assignments[0],
-    [assignments],
-  );
-
-  useEffect(() => {
-    if (!active) {
-      setRoute(null);
-      return;
-    }
-    dispatchApi.route(active.id)
-      .then((response) => setRoute({
-        distanceKm: response.distanceKm,
-        etaMinutes: response.etaMinutes,
-        instructions: response.instructions,
-        route: {
-          id: `assignment-route-${active.id}`,
-          tone: "blue",
-          points: response.geometry.map((point) => ({ lat: point.latitude, lng: point.longitude })),
-        },
-      }))
-      .catch(() => setRoute(null));
-  }, [active?.id]);
-
+  const activeAssignments = useMemo(() => assignments.filter((assignment) => !["COMPLETED", "OFFLINE"].includes(assignment.responderStatus)), [assignments]);
+  const selected = useMemo(() => assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? activeAssignments[0] ?? assignments[0], [assignments, selectedAssignmentId, activeAssignments]);
   const markers: MapMarker[] = assignments
-    .filter((assignment) => typeof assignment.latitude === "number" && typeof assignment.longitude === "number")
+    .filter(hasAssignmentGps)
     .map((assignment) => ({
-      id: assignment.id,
+      id: `assignment-${assignment.id}`,
       lat: assignment.latitude as number,
       lng: assignment.longitude as number,
       title: assignment.referenceNumber,
       subtitle: `${label(assignment.type)} - ${label(assignment.priority)} - ${assignment.location}`,
       tone: assignment.priority === "CRITICAL" ? "red" : "amber",
     }));
-
-  const routeSteps = active
-    ? [
-        { label: "Current Status", value: label(active.responderStatus), tone: "bg-blue-50" },
-        { label: "Destination", value: active.location, tone: "bg-emerald-50" },
-        { label: "Priority", value: label(active.priority), tone: "bg-amber-50" },
-        { label: "ETA", value: `${active.etaMinutes} minutes`, tone: "bg-slate-50" },
-      ]
-    : [];
+  const mapCenter = selected && hasAssignmentGps(selected) ? { lat: selected.latitude as number, lng: selected.longitude as number } : undefined;
 
   async function locateAndShare(force = true) {
     if (!navigator.geolocation) {
@@ -91,55 +65,27 @@ export default function Map() {
     );
   }
 
+  function handleMarkerClick(marker: MapMarker) {
+    const assignmentId = markerIdNumber(marker.id, "assignment-");
+    if (assignmentId) setSelectedAssignmentId(assignmentId);
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 lg:p-8">
       <div>
-        <h1 className="text-3xl font-bold text-slate-950">Live GPS & Navigation</h1>
-        <p className="mt-1 text-slate-600">Real map navigation to assigned incident destinations.</p>
+        <h1 className="text-3xl font-bold text-slate-950">Assigned Incident Map</h1>
+        <p className="mt-1 text-slate-600">View assigned incident locations here and open Google Maps for turn-by-turn routing.</p>
       </div>
 
       {error ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">{error}</div> : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <RealTimeMap markers={markers} userLocation={userLocation} onLocate={() => locateAndShare(true)} locating={locating} routes={route ? [route.route] : []} />
+          <RealTimeMap markers={markers} userLocation={userLocation} initialCenter={mapCenter} onLocate={() => locateAndShare(true)} locating={locating} onMarkerClick={handleMarkerClick} />
         </div>
 
         <div className="space-y-5">
-          <section className="rounded-lg border bg-white p-5 shadow-sm">
-            <h3 className="mb-4 font-semibold text-slate-950">Current Route</h3>
-            {active ? (
-              <div className="space-y-3">
-                {routeSteps.map((step) => (
-                  <div key={step.label} className={`rounded-lg p-3 ${step.tone}`}>
-                    <p className="text-xs font-semibold text-slate-500">{step.label}</p>
-                    <p className="text-sm font-medium text-slate-950">{step.value}</p>
-                  </div>
-                ))}
-                {route ? (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
-                    <p className="text-xs font-semibold text-blue-700">Optimized route</p>
-                    <p className="text-sm font-bold text-slate-950">{route.distanceKm} km - {route.etaMinutes} min</p>
-                  </div>
-                ) : null}
-                <a className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700" href={active.latitude && active.longitude ? `https://www.google.com/maps/dir/?api=1&destination=${active.latitude},${active.longitude}` : undefined} target="_blank" rel="noreferrer">
-                  <Navigation className="h-4 w-4" />
-                  Open Turn-by-Turn Route
-                </a>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">You do not have an active assignment right now.</p>
-            )}
-          </section>
-
-          {route ? (
-            <section className="rounded-lg border bg-white p-5 shadow-sm">
-              <h3 className="mb-4 font-semibold text-slate-950">Route Instructions</h3>
-              <ol className="space-y-2 text-sm text-slate-700">
-                {route.instructions.map((instruction, index) => <li key={instruction} className="rounded-lg bg-slate-50 p-3"><span className="font-bold">{index + 1}.</span> {instruction}</li>)}
-              </ol>
-            </section>
-          ) : null}
+          <AssignmentDetail assignment={selected} />
 
           <section className="rounded-lg border bg-white p-5 shadow-sm">
             <h3 className="mb-4 flex items-center gap-2 font-semibold text-slate-950"><LocateFixed className="h-5 w-5 text-blue-600" /> Responder GPS</h3>
@@ -159,8 +105,8 @@ export default function Map() {
                 <p className="text-xl font-bold text-slate-950">{assignments.length}</p>
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">Pending</p>
-                <p className="text-xl font-bold text-slate-950">{assignments.filter((item) => item.responderStatus === "ASSIGNED").length}</p>
+                <p className="text-xs text-slate-500">Active</p>
+                <p className="text-xl font-bold text-slate-950">{activeAssignments.length}</p>
               </div>
             </div>
           </section>
@@ -170,7 +116,7 @@ export default function Map() {
               <Clock className="mt-0.5 h-5 w-5 text-amber-700" />
               <div>
                 <p className="font-semibold text-slate-950">Keep status current</p>
-                <p className="mt-1 text-sm text-slate-700">Dispatcher maps refresh from your consented GPS updates.</p>
+                <p className="mt-1 text-sm text-slate-700">Manage assignment statuses from the Incidents page. This map is for location awareness and routing.</p>
               </div>
             </div>
           </section>
@@ -182,3 +128,45 @@ export default function Map() {
   );
 }
 
+function AssignmentDetail({ assignment }: { assignment?: AssignmentResponse }) {
+  if (!assignment) return <section className="rounded-lg border bg-white p-5 text-sm text-slate-500 shadow-sm">You do not have an assigned incident with a location yet.</section>;
+  const hasGps = hasAssignmentGps(assignment);
+  return (
+    <section className="rounded-lg border bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-950">Assigned Incident</h3>
+          <p className="text-sm font-bold text-red-600">{assignment.referenceNumber}</p>
+        </div>
+        <AlertCircle className="h-5 w-5 text-red-600" />
+      </div>
+      <div className="space-y-3">
+        <Info label="Type" value={label(assignment.type)} />
+        <Info label="Priority" value={label(assignment.priority)} />
+        <Info label="Status" value={`${label(assignment.incidentStatus)} / ${label(assignment.responderStatus)}`} />
+        <Info label="Location" value={assignment.location || (hasGps ? `${assignment.latitude?.toFixed(5)}, ${assignment.longitude?.toFixed(5)}` : "Waiting for GPS coordinates")} />
+        <Info label="Details" value={assignment.description || "No extra details provided."} />
+      </div>
+      {hasGps ? <a className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700" href={googleMapUrl(assignment.latitude as number, assignment.longitude as number)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" />Open in Google Maps</a> : null}
+    </section>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-500">{label}</p><p className="text-sm font-medium text-slate-950">{value}</p></div>;
+}
+
+function hasAssignmentGps(assignment: AssignmentResponse) {
+  return typeof assignment.latitude === "number" && typeof assignment.longitude === "number";
+}
+
+function markerIdNumber(id: string | number, prefix: string) {
+  if (typeof id === "number") return id;
+  if (!id.startsWith(prefix)) return null;
+  const value = Number(id.slice(prefix.length));
+  return Number.isFinite(value) ? value : null;
+}
+
+function googleMapUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}

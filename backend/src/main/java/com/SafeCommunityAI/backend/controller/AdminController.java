@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -109,6 +110,7 @@ public class AdminController {
     }
 
     @GetMapping("/incidents")
+    @Transactional(readOnly = true)
     public List<?> incidents() {
         return incidentRepository.findAll().stream()
                 .sorted(java.util.Comparator.comparing(com.SafeCommunityAI.backend.entity.Incident::getReportedAt, java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))

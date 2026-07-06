@@ -128,6 +128,8 @@ export default function IncidentQueue() {
 
 function IncidentRow({ incident, responders, assigning, resolving, onAssign, onResolve, onViewResponder, onRecommend }: { incident: IncidentResponse; responders: ResponderDetailResponse[]; assigning: boolean; resolving: boolean; onAssign: (responderId: number) => void; onResolve: () => void; onViewResponder: (responder: ResponderDetailResponse) => void; onRecommend: () => void }) {
   const availableResponders = responders.filter((responder) => responder.availabilityStatus === "AVAILABLE" || !responder.availabilityStatus);
+  const localMl = incident.aiSource === "LOCAL_ML";
+  const aiLabel = localMl ? `Local ML triage${incident.aiModel ? ` - ${incident.aiModel}` : ""}` : "Rule-based triage";
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -138,10 +140,16 @@ function IncidentRow({ incident, responders, assigning, resolving, onAssign, onR
             <Badge label={label(incident.type)} />
           </div>
           <p className="mb-3 text-sm text-slate-700">{incident.description || "No description provided"}</p>
-          <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950">
-            <div className="mb-1 flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4" /> AI priority {incident.priorityScore ?? 0}/100, confidence {Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</div>
-            <p>{incident.aiExplanation || "Priority is based on the incident type, severity words, and shared location."}</p>
+          <div className={`mb-3 rounded-lg border p-3 text-sm ${localMl ? "border-emerald-100 bg-emerald-50 text-emerald-950" : "border-amber-100 bg-amber-50 text-amber-950"}`}>
+            <div className="mb-1 flex flex-wrap items-center gap-2 font-semibold">
+              <Sparkles className="h-4 w-4" />
+              <span>{aiLabel}</span>
+              <span className="rounded-md bg-white/70 px-2 py-0.5 text-xs">Priority {incident.priorityScore ?? 0}/100</span>
+              <span className="rounded-md bg-white/70 px-2 py-0.5 text-xs">Confidence {Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</span>
+            </div>
+            <p>{incident.aiExplanation || "Priority is based on incident type, severity words, and shared location."}</p>
             <p className="mt-1 font-medium">Recommended support: {incident.resourceSuggestion || "Dispatcher review"}</p>
+            {!localMl && incident.aiFallbackReason ? <p className="mt-1 text-xs font-semibold opacity-80">Fallback reason: {incident.aiFallbackReason}</p> : null}
           </div>
           <div className="flex flex-wrap gap-3 text-sm text-slate-500">
             <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {incident.manualLocation || "Location shared by GPS"}</span>
@@ -244,3 +252,5 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+

@@ -12,9 +12,11 @@ import com.SafeCommunityAI.backend.repository.IncidentRepository;
 import com.SafeCommunityAI.backend.repository.IncidentAttachmentRepository;
 import com.SafeCommunityAI.backend.repository.UserRepository;
 import com.SafeCommunityAI.backend.repository.EmergencyContactRepository;
+import com.SafeCommunityAI.backend.service.AiTriageService;
 import com.SafeCommunityAI.backend.service.AuditService;
 import com.SafeCommunityAI.backend.service.IncidentService;
 import com.SafeCommunityAI.backend.service.NotificationService;
+import com.SafeCommunityAI.backend.service.TriageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,13 +43,14 @@ public class IncidentServiceImpl implements IncidentService {
     private final AuditService auditService;
     private final EmergencyContactRepository emergencyContactRepository;
     private final IncidentAttachmentRepository incidentAttachmentRepository;
+    private final AiTriageService aiTriageService;
 
     @Override
     @Transactional
     public IncidentResponse createIncident(IncidentRequest request, String actorEmail) {
         validateIncidentRequest(request);
         User reporter = userRepository.findByEmail(actorEmail).orElseThrow(() -> new ResourceNotFoundException("Reporter not found"));
-        PriorityResult priority = score(request);
+        TriageResult priority = aiTriageService.analyze(request, ruleScore(request));
         Incident incident = Incident.builder()
                 .referenceNumber("INC-" + System.currentTimeMillis())
                 .type(request.type())
@@ -57,6 +60,9 @@ public class IncidentServiceImpl implements IncidentService {
                 .aiConfidenceScore(priority.confidence())
                 .aiExplanation(priority.explanation())
                 .resourceSuggestion(priority.resourceSuggestion())
+                .aiSource(priority.source())
+                .aiModel(priority.model())
+                .aiFallbackReason(priority.fallbackReason())
                 .severity(request.severity())
                 .latitude(request.latitude())
                 .longitude(request.longitude())
@@ -122,7 +128,7 @@ public class IncidentServiceImpl implements IncidentService {
         Incident incident = incidentRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Incident not found"));
         validateCitizenCanManage(incident, actor, "edit");
 
-        PriorityResult priority = score(request);
+        TriageResult priority = aiTriageService.analyze(request, ruleScore(request));
         incident.setType(request.type());
         incident.setSeverity(request.severity());
         incident.setLatitude(request.latitude());
@@ -138,6 +144,9 @@ public class IncidentServiceImpl implements IncidentService {
         incident.setAiConfidenceScore(priority.confidence());
         incident.setAiExplanation(priority.explanation());
         incident.setResourceSuggestion(priority.resourceSuggestion());
+        incident.setAiSource(priority.source());
+        incident.setAiModel(priority.model());
+        incident.setAiFallbackReason(priority.fallbackReason());
 
         incident = incidentRepository.save(incident);
         auditService.log("INCIDENT_EDITED", actorEmail, "Incident", incident.getId(), incident.getType().name());
@@ -257,7 +266,7 @@ public class IncidentServiceImpl implements IncidentService {
         return status == IncidentStatus.PENDING || status == IncidentStatus.PRIORITIZED;
     }
 
-    private PriorityResult score(IncidentRequest request) {
+    private TriageResult ruleScore(IncidentRequest request) {
         List<String> factors = new ArrayList<>();
         int score = switch (request.type()) {
             case MEDICAL, FIRE -> {
@@ -291,8 +300,7 @@ public class IncidentServiceImpl implements IncidentService {
             case NATURAL_DISASTER -> "Multi-agency response team";
             case OTHER -> "Dispatcher review for best available resource";
         };
-        return new PriorityResult(Math.min(score, 100), level, Math.min(0.98, 0.55 + score / 200.0), String.join("; ", factors), resourceSuggestion);
+        return new TriageResult(Math.min(score, 100), level, Math.min(0.98, 0.55 + score / 200.0), String.join("; ", factors), resourceSuggestion, "RULE_FALLBACK", "rules-v1", null);
     }
 
-    private record PriorityResult(int score, PriorityLevel level, double confidence, String explanation, String resourceSuggestion) {}
 }

@@ -15,6 +15,9 @@ public record IncidentResponse(
         Double aiConfidenceScore,
         String aiExplanation,
         String resourceSuggestion,
+        String aiSource,
+        String aiModel,
+        String aiFallbackReason,
         String severity,
         BigDecimal latitude,
         BigDecimal longitude,
@@ -26,6 +29,14 @@ public record IncidentResponse(
         boolean emergencyContactsNotified,
         List<AttachmentResponse> attachments,
         String reporterName,
+        Long assignmentId,
+        Long assignedResponderId,
+        String assignedResponderName,
+        String assignedResponderEmail,
+        ResponderStatus responderStatus,
+        Integer etaMinutes,
+        Instant assignedAt,
         Instant reportedAt,
         Instant resolvedAt
 ) {}
+

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Home, MapPin, TrendingUp, Settings } from "lucide-react";
+import { AlertCircle, Home, MapPin, TrendingUp, Settings } from "lucide-react";
 
 export default function ResponderDashboard() {
   const navigate = useNavigate();
@@ -19,6 +19,11 @@ export default function ResponderDashboard() {
       label: "Home",
       path: "/dashboard/responder",
       icon: <Home className="w-5 h-5" />,
+    },
+    {
+      label: "Incidents",
+      path: "/dashboard/responder/incidents",
+      icon: <AlertCircle className="w-5 h-5" />,
     },
     {
       label: "GPS & Navigation",

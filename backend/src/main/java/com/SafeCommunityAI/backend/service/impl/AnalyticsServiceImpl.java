@@ -8,6 +8,7 @@ import com.SafeCommunityAI.backend.repository.*;
 import com.SafeCommunityAI.backend.service.AnalyticsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -27,6 +28,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     private final AppMapper mapper;
 
     @Override
+    @Transactional(readOnly = true)
     public Map<String, Object> operationsAnalytics() {
         List<Incident> incidents = incidentRepository.findAll();
         List<DispatchAssignment> assignments = assignmentRepository.findAll();

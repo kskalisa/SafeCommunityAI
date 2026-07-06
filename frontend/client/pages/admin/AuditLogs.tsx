@@ -17,7 +17,7 @@ export default function AuditLogs() {
     return text.includes(search.toLowerCase()) && (severity === "ALL" || level === severity);
   }), [logs.data, search, severity]);
   return (
-    <AdminPageShell title="Security & Audit Logs" description="Inspect authentication, user administration, incident changes, and high-risk system events." actions={<AdminButton variant="secondary" onClick={() => downloadCsv("audit-logs.csv", rows)}><Download className="h-4 w-4" />Export</AdminButton>}>
+    <AdminPageShell title="Security & Audit Logs" description="Inspect authentication, user administration, incident changes, and high-risk system events." actions={<AdminButton variant="secondary" onClick={() => downloadCsv("audit-logs.csv", rows.map((log) => ({ event: label(log.action), severity: levelFor(log.action, log.detail), actor: log.actorEmail, entity: `${log.entityType || "System"}${log.entityId ? ` #${log.entityId}` : ""}`, timestamp: new Date(log.createdAt).toLocaleString(), details: log.detail || "" })))}><Download className="h-4 w-4" />Export</AdminButton>}>
       {logs.isLoading ? <LoadingState label="Loading audit logs..." /> : null}
       <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_14rem]">
         <SearchInput value={search} onChange={setSearch} placeholder="Search actor, action, entity, details..." />

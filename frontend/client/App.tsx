@@ -20,6 +20,7 @@ import CitizenEmergencyContacts from "./pages/citizen/EmergencyContacts";
 import ResponderDashboard from "./pages/ResponderDashboard";
 import ResponderHome from "./pages/responder/Home";
 import ResponderMap from "./pages/responder/Map";
+import ResponderIncidents from "./pages/responder/Incidents";
 import ResponderPerformance from "./pages/responder/Performance";
 import ResponderSettings from "./pages/responder/Settings";
 import DispatcherDashboard from "./pages/DispatcherDashboard";
@@ -70,6 +71,7 @@ const App = () => (
           {/* Responder Dashboard Routes */}
           <Route path="/dashboard/responder" element={<ResponderDashboard />}>
             <Route index element={<ResponderHome />} />
+            <Route path="incidents" element={<ResponderIncidents />} />
             <Route path="map" element={<ResponderMap />} />
             <Route path="performance" element={<ResponderPerformance />} />
             <Route path="settings" element={<ResponderSettings />} />
@@ -110,4 +112,8 @@ const App = () => (
 );
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+
+
+
 

@@ -1,19 +1,25 @@
 package com.SafeCommunityAI.backend.config;
 
-import com.SafeCommunityAI.backend.dto.IncidentRequest;
-import com.SafeCommunityAI.backend.dto.RegisterRequest;
-import com.SafeCommunityAI.backend.entity.Hospital;
-import com.SafeCommunityAI.backend.entity.Resource;
-import com.SafeCommunityAI.backend.enums.*;
-import com.SafeCommunityAI.backend.repository.*;
-import com.SafeCommunityAI.backend.service.AuthService;
-import com.SafeCommunityAI.backend.service.IncidentService;
-import lombok.RequiredArgsConstructor;
+import java.math.BigDecimal;
+
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.math.BigDecimal;
+import com.SafeCommunityAI.backend.dto.IncidentRequest;
+import com.SafeCommunityAI.backend.dto.RegisterRequest;
+import com.SafeCommunityAI.backend.entity.Hospital;
+import com.SafeCommunityAI.backend.entity.Resource;
+import com.SafeCommunityAI.backend.enums.IncidentType;
+import com.SafeCommunityAI.backend.enums.ResourceStatus;
+import com.SafeCommunityAI.backend.enums.Role;
+import com.SafeCommunityAI.backend.repository.HospitalRepository;
+import com.SafeCommunityAI.backend.repository.ResourceRepository;
+import com.SafeCommunityAI.backend.repository.UserRepository;
+import com.SafeCommunityAI.backend.service.AuthService;
+import com.SafeCommunityAI.backend.service.IncidentService;
+
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @RequiredArgsConstructor
@@ -22,6 +28,7 @@ public class DataSeeder {
     CommandLineRunner seed(UserRepository users, ResourceRepository resources, HospitalRepository hospitals, AuthService authService, IncidentService incidentService) {
         return args -> {
             if (users.count() > 0) return;
+            authService.register(new RegisterRequest("Administrator", "admin@demo.com", "demo123", Role.ADMIN, "+250700000000", true, null, null, null));
             authService.register(new RegisterRequest("Demo Citizen", "citizen@demo.com", "demo123", Role.CITIZEN, "+250700000001", true, null, null, null));
             authService.register(new RegisterRequest("Demo Responder", "responder@demo.com", "demo123", Role.RESPONDER, "+250700000002", true, "Kigali EMS", "EMS-2026-001", "AMB-12"));
             authService.register(new RegisterRequest("Demo Dispatcher", "dispatcher@demo.com", "demo123", Role.DISPATCHER, "+250700000003", true, null, null, null));

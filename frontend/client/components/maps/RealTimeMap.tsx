@@ -1,4 +1,4 @@
-﻿import { Crosshair, ExternalLink, LocateFixed, Minus, Plus } from "lucide-react";
+import { Crosshair, ExternalLink, LocateFixed, Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export type MapMarkerTone = "red" | "blue" | "green" | "amber" | "slate";
@@ -9,6 +9,8 @@ export interface MapMarker {
   lng: number;
   title: string;
   subtitle?: string;
+  details?: Array<{ label: string; value: string }>;
+  actionLabel?: string;
   tone?: MapMarkerTone;
 }
 
@@ -27,6 +29,7 @@ interface RealTimeMapProps {
   locating?: boolean;
   layer?: "street" | "satellite" | "terrain";
   routes?: MapRoute[];
+  onMarkerClick?: (marker: MapMarker) => void;
 }
 
 const TILE_SIZE = 256;
@@ -39,13 +42,17 @@ const toneClass: Record<MapMarkerTone, string> = {
   slate: "border-slate-900 bg-slate-600",
 };
 
-export default function RealTimeMap({ markers, userLocation, initialCenter = DEFAULT_CENTER, heightClass = "h-[32rem]", onLocate, locating, layer = "street", routes = [] }: RealTimeMapProps) {
+export default function RealTimeMap({ markers, userLocation, initialCenter = DEFAULT_CENTER, heightClass = "h-[32rem]", onLocate, locating, layer = "street", routes = [], onMarkerClick }: RealTimeMapProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; center: { lat: number; lng: number } } | null>(null);
   const [size, setSize] = useState({ width: 900, height: 520 });
   const [center, setCenter] = useState(initialCenter);
   const [zoom, setZoom] = useState(14);
   const [activeMarker, setActiveMarker] = useState<string | number | null>(null);
+
+  useEffect(() => {
+    setCenter(initialCenter);
+  }, [initialCenter.lat, initialCenter.lng]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -60,7 +67,19 @@ export default function RealTimeMap({ markers, userLocation, initialCenter = DEF
   const allMarkers = useMemo(() => {
     const points = [...markers];
     if (userLocation) {
-      points.unshift({ id: "current-location", lat: userLocation.lat, lng: userLocation.lng, title: "Current GPS location", subtitle: userLocation.accuracy ? `Accuracy ${Math.round(userLocation.accuracy)}m` : "Browser GPS", tone: "blue" });
+      points.unshift({
+        id: "current-location",
+        lat: userLocation.lat,
+        lng: userLocation.lng,
+        title: "You are here",
+        subtitle: userLocation.accuracy ? `Within about ${Math.round(userLocation.accuracy)} meters` : "Shared from this device",
+        details: [
+          { label: "Place", value: `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}` },
+          ...(userLocation.accuracy ? [{ label: "Location range", value: `${Math.round(userLocation.accuracy)} meters` }] : []),
+        ],
+        actionLabel: "Get directions here",
+        tone: "blue",
+      });
     }
     return points;
   }, [markers, userLocation]);
@@ -92,6 +111,11 @@ export default function RealTimeMap({ markers, userLocation, initialCenter = DEF
     dragRef.current = null;
   }
 
+  function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setZoom((value) => Math.max(3, Math.min(18, value + (event.deltaY < 0 ? 1 : -1))));
+  }
+
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm">
       <div
@@ -101,6 +125,7 @@ export default function RealTimeMap({ markers, userLocation, initialCenter = DEF
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onWheel={handleWheel}
       >
         {tiles.map((tile) => (
           <img
@@ -126,20 +151,23 @@ export default function RealTimeMap({ markers, userLocation, initialCenter = DEF
           })}
         </svg>
 
-        {allMarkers.map((marker) => {
+        {allMarkers.map((marker, index) => {
           const point = latLngToPoint(marker.lat, marker.lng, zoom);
-          const left = size.width / 2 + (point.x - centerPoint.x);
-          const top = size.height / 2 + (point.y - centerPoint.y);
+          const offset = markerOffset(marker, index, allMarkers);
+          const left = size.width / 2 + (point.x - centerPoint.x) + offset.x;
+          const top = size.height / 2 + (point.y - centerPoint.y) + offset.y;
           const isActive = activeMarker === marker.id;
           const tone = marker.tone ?? "red";
           return (
             <button
               key={marker.id}
-              className="absolute -translate-x-1/2 -translate-y-full cursor-pointer"
+              className={`absolute -translate-x-1/2 -translate-y-full cursor-pointer ${isActive ? "z-30" : "z-20"}`}
               style={{ left, top }}
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 setActiveMarker(isActive ? null : marker.id);
+                onMarkerClick?.(marker);
               }}
               aria-label={marker.title}
             >
@@ -150,8 +178,18 @@ export default function RealTimeMap({ markers, userLocation, initialCenter = DEF
                 <span className="absolute bottom-10 left-1/2 w-64 -translate-x-1/2 rounded-lg bg-slate-950 p-3 text-left text-xs text-white shadow-xl">
                   <span className="block font-semibold">{marker.title}</span>
                   {marker.subtitle ? <span className="mt-1 block text-slate-300">{marker.subtitle}</span> : null}
+                  {marker.details?.length ? (
+                    <span className="mt-3 block space-y-2 border-t border-white/10 pt-3">
+                      {marker.details.map((detail) => (
+                        <span key={`${marker.id}-${detail.label}`} className="block">
+                          <span className="block text-[10px] font-semibold uppercase text-slate-400">{detail.label}</span>
+                          <span className="block text-xs text-white">{detail.value}</span>
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
                   <a className="mt-3 inline-flex items-center gap-1 font-semibold text-blue-200" href={`https://www.google.com/maps/dir/?api=1&destination=${marker.lat},${marker.lng}`} target="_blank" rel="noreferrer">
-                    Open route <ExternalLink className="h-3 w-3" />
+                    {marker.actionLabel ?? "Get directions"} <ExternalLink className="h-3 w-3" />
                   </a>
                 </span>
               ) : null}
@@ -159,31 +197,44 @@ export default function RealTimeMap({ markers, userLocation, initialCenter = DEF
           );
         })}
 
-        <div className="absolute right-4 top-4 flex flex-col gap-2">
-          <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50" onClick={() => setZoom((value) => Math.min(18, value + 1))} aria-label="Zoom in">
+        <div className="absolute right-4 top-4 z-40 flex flex-col gap-2" onPointerDown={(event) => event.stopPropagation()}>
+          <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50" onClick={(event) => { event.stopPropagation(); setZoom((value) => Math.min(18, value + 1)); }} aria-label="Zoom in">
             <Plus className="h-5 w-5 text-slate-700" />
           </button>
-          <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50" onClick={() => setZoom((value) => Math.max(3, value - 1))} aria-label="Zoom out">
+          <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50" onClick={(event) => { event.stopPropagation(); setZoom((value) => Math.max(3, value - 1)); }} aria-label="Zoom out">
             <Minus className="h-5 w-5 text-slate-700" />
           </button>
-          <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50" onClick={fitMarkers} aria-label="Fit markers">
+          <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50" onClick={(event) => { event.stopPropagation(); fitMarkers(); }} aria-label="Fit markers">
             <Crosshair className="h-5 w-5 text-slate-700" />
           </button>
           {onLocate ? (
-            <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50 disabled:opacity-60" onClick={onLocate} disabled={locating} aria-label="Use my GPS location">
+            <button className="rounded-lg bg-white p-2 shadow transition hover:bg-slate-50 disabled:opacity-60" onClick={(event) => { event.stopPropagation(); onLocate(); }} disabled={locating} aria-label="Find my location">
               <LocateFixed className={`h-5 w-5 text-slate-700 ${locating ? "animate-pulse" : ""}`} />
             </button>
           ) : null}
         </div>
 
         <div className="absolute bottom-3 right-3 rounded bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow">
-          Map data (c) OpenStreetMap contributors
+          Map provided by OpenStreetMap
         </div>
       </div>
     </div>
   );
 }
 
+function markerOffset(marker: MapMarker, index: number, markers: MapMarker[]) {
+  const key = markerPositionKey(marker);
+  const group = markers.filter((item) => markerPositionKey(item) === key);
+  if (group.length <= 1) return { x: 0, y: 0 };
+  const groupIndex = group.findIndex((item) => item.id === marker.id);
+  const angle = (Math.PI * 2 * groupIndex) / group.length - Math.PI / 2;
+  const radius = Math.min(30, 12 + group.length * 3);
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+}
+
+function markerPositionKey(marker: MapMarker) {
+  return `${marker.lat.toFixed(4)},${marker.lng.toFixed(4)}`;
+}
 function visibleTiles(centerPoint: { x: number; y: number }, size: { width: number; height: number }, zoom: number) {
   const minX = Math.floor((centerPoint.x - size.width / 2) / TILE_SIZE) - 1;
   const maxX = Math.floor((centerPoint.x + size.width / 2) / TILE_SIZE) + 1;
@@ -226,4 +277,3 @@ function tileUrl(layer: "street" | "satellite" | "terrain", z: number, x: number
   if (layer === "satellite") return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
   return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
 }
-
