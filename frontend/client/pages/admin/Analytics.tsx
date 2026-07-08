@@ -41,6 +41,7 @@ import type { AnalyticsResponse, AuditLogResponse, IncidentResponse, IncidentSta
 type SortKey = "referenceNumber" | "type" | "priority" | "status" | "reporterName" | "assignedResponderName" | "reportedAt" | "aiConfidenceScore";
 type SortDirection = "asc" | "desc";
 type IncidentReportFilter = "ALL" | "OPEN" | "ASSIGNED" | "UNASSIGNED" | "RESOLVED";
+type ReportRange = "ALL" | "TODAY" | "WEEK" | "MONTH" | "YEAR";
 type ExportOptions = {
   summary: boolean;
   incidents: boolean;
@@ -65,9 +66,52 @@ type RealStats = {
 };
 
 const colors = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"];
-const label = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
-const aiSourceLabel = (incident: IncidentResponse) => incident.aiSource === "LOCAL_ML" ? `Local ML${incident.aiModel ? ` (${incident.aiModel})` : ""}` : "Rule-based triage";
+const friendlyLabels: Record<string, string> = {
+  PENDING: "Waiting for review",
+  PRIORITIZED: "Reviewed",
+  ASSIGNED: "Help assigned",
+  EN_ROUTE: "Team on the way",
+  ON_SCENE: "Team arrived",
+  RESOLVED: "Closed",
+  CANCELLED: "Cancelled",
+  CRITICAL: "Life-threatening",
+  HIGH: "High need",
+  MEDIUM: "Medium need",
+  LOW: "Low need",
+  MEDICAL: "Medical help",
+  FIRE: "Fire",
+  ACCIDENT: "Accident",
+  CRIME: "Safety threat",
+  NATURAL_DISASTER: "Natural disaster",
+  OTHER: "Other help",
+  RESPONDER: "Response team member",
+  DISPATCHER: "Dispatch team",
+  CITIZEN: "Community member",
+  ADMIN: "Administrator",
+};
+const label = (value: string) => friendlyLabels[value] ?? value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+const aiSourceLabel = (incident: IncidentResponse) => incident.aiSource === "LOCAL_ML" ? "Smart review" : "Basic review";
 const percent = (count: number, total: number) => Math.round((count / Math.max(1, total)) * 100);
+
+function rangeStart(range: ReportRange) {
+  const start = new Date();
+  if (range === "ALL") return null;
+  if (range === "TODAY") {
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "WEEK") {
+    const day = start.getDay();
+    const daysSinceMonday = day === 0 ? 6 : day - 1;
+    start.setDate(start.getDate() - daysSinceMonday);
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "MONTH") {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "YEAR") {
+    start.setMonth(0, 1);
+    start.setHours(0, 0, 0, 0);
+  }
+  return start;
+}
 
 const emptyAnalytics: AnalyticsResponse = {
   generatedAt: "",
@@ -92,26 +136,26 @@ const emptyAnalytics: AnalyticsResponse = {
 
 const statusOptions: Array<"ALL" | IncidentStatus> = ["ALL", "PENDING", "PRIORITIZED", "ASSIGNED", "EN_ROUTE", "ON_SCENE", "RESOLVED", "CANCELLED"];
 const priorityOptions: Array<"ALL" | PriorityLevel> = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW"];
-const timeOptions = [
-  { value: 0, label: "All time" },
-  { value: 7, label: "7 days" },
-  { value: 30, label: "30 days" },
-  { value: 90, label: "90 days" },
-  { value: 365, label: "1 year" },
+const timeOptions: Array<{ value: ReportRange; label: string }> = [
+  { value: "ALL", label: "All time" },
+  { value: "TODAY", label: "Today" },
+  { value: "WEEK", label: "Weekly" },
+  { value: "MONTH", label: "Monthly" },
+  { value: "YEAR", label: "Yearly" },
 ];
 const incidentReportFilterOptions: Array<{ value: IncidentReportFilter; label: string }> = [
-  { value: "ALL", label: "All Incident Reports" },
-  { value: "OPEN", label: "Open Incident Reports" },
-  { value: "ASSIGNED", label: "Assigned Incident Reports" },
-  { value: "UNASSIGNED", label: "Unassigned Incident Reports" },
-  { value: "RESOLVED", label: "Resolved Incident Reports" },
+  { value: "ALL", label: "All reports" },
+  { value: "OPEN", label: "Open reports" },
+  { value: "ASSIGNED", label: "Reports with a team" },
+  { value: "UNASSIGNED", label: "Reports without a team" },
+  { value: "RESOLVED", label: "Closed reports" },
 ];
 
 export default function Analytics() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"ALL" | IncidentStatus>("ALL");
   const [priority, setPriority] = useState<"ALL" | PriorityLevel>("ALL");
-  const [days, setDays] = useState(0);
+  const [reportRange, setReportRange] = useState<ReportRange>("ALL");
   const [incidentReportFilter, setIncidentReportFilter] = useState<IncidentReportFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("reportedAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -145,13 +189,13 @@ export default function Analytics() {
   const resources = resourcesQuery.data ?? [];
   const loading = analyticsQuery.isLoading || usersQuery.isLoading || logsQuery.isLoading || incidentsQuery.isLoading || resourcesQuery.isLoading;
   const dataErrors = [
-    analyticsQuery.isError ? "analytics summary" : "",
+    analyticsQuery.isError ? "overview summary" : "",
     usersQuery.isError ? "users" : "",
-    logsQuery.isError ? "audit logs" : "",
-    incidentsQuery.isError ? "incidents" : "",
-    resourcesQuery.isError ? "resources" : "",
+    logsQuery.isError ? "activity history" : "",
+    incidentsQuery.isError ? "emergency reports" : "",
+    resourcesQuery.isError ? "support options" : "",
   ].filter(Boolean);
-  const since = useMemo(() => (days > 0 ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : null), [days]);
+  const since = useMemo(() => rangeStart(reportRange), [reportRange]);
 
   const filteredIncidents = useMemo(() => {
     const query = search.toLowerCase();
@@ -161,7 +205,7 @@ export default function Analytics() {
     });
   }, [allIncidents, incidentReportFilter, priority, search, since, status]);
 
-  const filteredUsers = useMemo(() => users.filter((user) => `${user.fullName} ${user.email} ${user.role}`.toLowerCase().includes(search.toLowerCase()) && (!since || new Date(user.createdAt) >= since)), [search, since, users]);
+  const filteredPeople = useMemo(() => users.filter((user) => `${user.fullName} ${user.email} ${user.role}`.toLowerCase().includes(search.toLowerCase()) && (!since || new Date(user.createdAt) >= since)), [search, since, users]);
   const filteredLogs = useMemo(() => logs.filter((log) => `${log.action} ${log.actorEmail} ${log.detail ?? ""}`.toLowerCase().includes(search.toLowerCase()) && (!since || new Date(log.createdAt) >= since)), [logs, search, since]);
 
   const sortedIncidents = useMemo(() => {
@@ -177,17 +221,17 @@ export default function Analytics() {
   const pagedIncidents = sortedIncidents.slice((page - 1) * pageSize, page * pageSize);
   const selectedIncidents = sortedIncidents.filter((incident) => selectedRows.includes(incident.id));
   const exportRows = selectedIncidents.length ? incidentExportRows(selectedIncidents) : incidentExportRows(sortedIncidents);
-  const realStats = useMemo(() => buildRealStats(allIncidents, users, resources, analytics), [allIncidents, analytics, resources, users]);
-  const filteredStats = useMemo(() => buildRealStats(filteredIncidents, filteredUsers, resources, analytics), [analytics, filteredIncidents, filteredUsers, resources]);
+  const overallStats = useMemo(() => buildRealStats(allIncidents, users, resources, analytics), [allIncidents, analytics, resources, users]);
+  const realStats = useMemo(() => buildRealStats(filteredIncidents, filteredPeople, resources, analytics), [analytics, filteredIncidents, filteredPeople, resources]);
   const confidencePct = realStats.aiAverageConfidence;
-  const chartData = useMemo(() => buildChartDataFromRecords(allIncidents, users, analytics), [allIncidents, analytics, users]);
-  const insights = useMemo(() => buildInsightsFromRecords(realStats, filteredStats, filteredIncidents), [filteredIncidents, filteredStats, realStats]);
+  const chartData = useMemo(() => buildChartDataFromRecords(filteredIncidents, filteredPeople, analytics), [analytics, filteredIncidents, filteredPeople]);
+  const insights = useMemo(() => buildInsightsFromRecords(overallStats, realStats, filteredIncidents), [filteredIncidents, overallStats, realStats]);
 
   const resetFilters = () => {
     setSearch("");
     setStatus("ALL");
     setPriority("ALL");
-    setDays(0);
+    setReportRange("ALL");
     setIncidentReportFilter("ALL");
     setPage(1);
   };
@@ -200,17 +244,17 @@ export default function Analytics() {
     resourcesQuery.refetch();
   };
 
-  const exportCsv = () => downloadCsv("safecommunity-reports.csv", exportRows.length ? exportRows : summaryRows(realStats, logs));
+  const exportCsv = () => downloadCsv("safecommunity-reports.csv", exportRows.length ? exportRows : summaryRows(realStats, filteredLogs));
   const exportPdf = () => {
     const incidentsForPdf = exportOptions.selectedOnly && selectedIncidents.length ? selectedIncidents : sortedIncidents;
-    const sections = buildPdfSections(exportOptions, realStats, filteredUsers, filteredLogs, incidentsForPdf, logs);
-    downloadPdf("safecommunity-reports.pdf", "SafeCommunity Reports & Analytics", sections, {
+    const sections = buildPdfSections(exportOptions, realStats, filteredPeople, filteredLogs, incidentsForPdf, filteredLogs);
+    downloadPdf("safecommunity-reports.pdf", "SafeCommunity Reports & Overview", sections, {
       filters: [
         `Search: ${search || "Any"}`,
-        `Status: ${status === "ALL" ? "All" : label(status)}`,
-        `Priority: ${priority === "ALL" ? "All" : label(priority)}`,
-        `Range: ${timeOptions.find((option) => option.value === days)?.label ?? "All time"}`,
-        `Incident Report: ${incidentReportFilterOptions.find((option) => option.value === incidentReportFilter)?.label ?? "All Incident Reports"}`,
+        `Progress: ${status === "ALL" ? "All" : label(status)}`,
+        `Urgency: ${priority === "ALL" ? "All" : label(priority)}`,
+        `Range: ${timeOptions.find((option) => option.value === reportRange)?.label ?? "All time"}`,
+        `Report type: ${incidentReportFilterOptions.find((option) => option.value === incidentReportFilter)?.label ?? "All reports"}`,
       ],
     });
     setExportOpen(false);
@@ -227,15 +271,15 @@ export default function Analytics() {
       <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="max-w-3xl">
-            <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Reports & Analytics</h1>
-            <p className="mt-2 text-slate-600">Monitor incidents, users, responders, system activity and export comprehensive reports.</p>
-            <p className="mt-3 text-sm text-slate-500">Live data loaded from {allIncidents.length} incident{allIncidents.length === 1 ? "" : "s"}, {users.length} user{users.length === 1 ? "" : "s"}, and {resources.length} resource{resources.length === 1 ? "" : "s"}.</p>
+            <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Reports & Overview</h1>
+            <p className="mt-2 text-slate-600">Review emergency reports, people, response teams, and system activity in one place.</p>
+            <p className="mt-3 text-sm text-slate-500">Live data loaded from {allIncidents.length} report{allIncidents.length === 1 ? "" : "s"}, {users.length} person record{users.length === 1 ? "" : "s"}, and {resources.length} support option{resources.length === 1 ? "" : "s"}.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="Export PDF" />
-            <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Export CSV" variant="secondary" />
+            <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="Download document" />
+            <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Download spreadsheet" variant="secondary" />
             <ActionButton onClick={printReport} icon={<Printer className="h-4 w-4" />} label="Print" variant="secondary" />
-            <ActionButton onClick={() => setScheduleOpen(true)} icon={<CalendarClock className="h-4 w-4" />} label="Schedule" variant="secondary" />
+            <ActionButton onClick={() => setScheduleOpen(true)} icon={<CalendarClock className="h-4 w-4" />} label="Reminder" variant="secondary" />
             <ActionButton onClick={refetchAll} icon={<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />} label="Refresh" variant="ghost" />
           </div>
         </div>
@@ -245,8 +289,8 @@ export default function Analytics() {
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
           <CheckCircle2 className="mt-0.5 h-5 w-5" />
           <div>
-            <p className="font-bold">Report schedule saved</p>
-            <p className="text-sm">A recurring report alert has been configured in this browser session.</p>
+            <p className="font-bold">Report reminder saved</p>
+            <p className="text-sm">A report reminder has been set for this browser session.</p>
           </div>
           <button onClick={() => setScheduleSaved(false)} className="ml-auto rounded-lg p-1 hover:bg-emerald-100" aria-label="Dismiss alert"><X className="h-4 w-4" /></button>
         </div>
@@ -256,8 +300,8 @@ export default function Analytics() {
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm">
           <AlertTriangle className="mt-0.5 h-5 w-5" />
           <div>
-            <p className="font-bold">Some report data could not be loaded</p>
-            <p className="text-sm">Missing source: {dataErrors.join(", ")}. The page is showing available live data and fallback summary values where possible.</p>
+            <p className="font-bold">Some report information could not be loaded</p>
+            <p className="text-sm">Missing information: {dataErrors.join(", ")}. The page is showing the information that is available right now.</p>
           </div>
         </div>
       ) : null}
@@ -267,18 +311,18 @@ export default function Analytics() {
           <label className="relative block">
             <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Search</span>
             <Search className="absolute left-3 top-8 h-4 w-4 text-slate-400" />
-            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search reference, reporter, responder, category, location..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search report number, person, team member, help type, place..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
           </label>
-          <FilterSelect labelText="Status" value={status} onChange={(value) => { setStatus(value as "ALL" | IncidentStatus); setPage(1); }} options={statusOptions} />
-          <FilterSelect labelText="Priority" value={priority} onChange={(value) => { setPriority(value as "ALL" | PriorityLevel); setPage(1); }} options={priorityOptions} />
-          <FilterSelect labelText="Time Range" value={String(days)} onChange={(value) => { setDays(Number(value)); setPage(1); }} options={timeOptions.map((option) => String(option.value))} display={(value) => timeOptions.find((option) => String(option.value) === value)?.label ?? value} />
+          <FilterSelect labelText="Progress" value={status} onChange={(value) => { setStatus(value as "ALL" | IncidentStatus); setPage(1); }} options={statusOptions} />
+          <FilterSelect labelText="Urgency" value={priority} onChange={(value) => { setPriority(value as "ALL" | PriorityLevel); setPage(1); }} options={priorityOptions} />
+          <FilterSelect labelText="Time period" value={reportRange} onChange={(value) => { setReportRange(value as ReportRange); setPage(1); }} options={timeOptions.map((option) => option.value)} display={(value) => timeOptions.find((option) => option.value === value)?.label ?? value} />
           <button onClick={resetFilters} className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
             <RotateCcw className="h-4 w-4" />
-            Reset
+            Clear choices
           </button>
           <button onClick={() => setPage(1)} className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
             <Filter className="h-4 w-4" />
-            Apply
+            Show results
           </button>
         </div>
       </section>
@@ -286,18 +330,18 @@ export default function Analytics() {
       {loading ? <LoadingCards /> : null}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Total Incidents" value={realStats.incidentCount} helper={`${filteredIncidents.length} match current filters`} icon={<FileText className="h-5 w-5" />} tone="blue" />
-        <MetricCard title="Open Incidents" value={realStats.activeIncidents} helper="Not resolved or cancelled" icon={<AlertTriangle className="h-5 w-5" />} tone="orange" />
-        <MetricCard title="Resolved Incidents" value={realStats.resolvedIncidents} helper="Completed response cases" icon={<CheckCircle2 className="h-5 w-5" />} tone="green" />
-        <MetricCard title="Pending Queue" value={realStats.pendingIncidentQueue} helper="Pending or prioritized cases" icon={<Clock3 className="h-5 w-5" />} tone="orange" />
-        <MetricCard title="Total Users" value={realStats.userCount} helper={`${filteredUsers.length} match filters`} icon={<Users className="h-5 w-5" />} tone="blue" />
-        <MetricCard title="Active Responders" value={realStats.activeResponders} helper="Enabled responder accounts" icon={<ShieldCheck className="h-5 w-5" />} tone="green" />
-        <MetricCard title="Resources Available" value={realStats.availableResources} helper={`${resources.length} total resources`} icon={<BarChart3 className="h-5 w-5" />} tone="green" />
-        <MetricCard title="AI Confidence" value={`${confidencePct}%`} helper="Average from AI or fallback triage records" icon={<Sparkles className="h-5 w-5" />} tone="purple" />
+        <MetricCard title="Total Reports" value={realStats.incidentCount} helper={`${overallStats.incidentCount} total available`} icon={<FileText className="h-5 w-5" />} tone="blue" />
+        <MetricCard title="Open Reports" value={realStats.activeIncidents} helper="Still being handled" icon={<AlertTriangle className="h-5 w-5" />} tone="orange" />
+        <MetricCard title="Closed Reports" value={realStats.resolvedIncidents} helper="Finished response cases" icon={<CheckCircle2 className="h-5 w-5" />} tone="green" />
+        <MetricCard title="Waiting List" value={realStats.pendingIncidentQueue} helper="Waiting or reviewed cases" icon={<Clock3 className="h-5 w-5" />} tone="orange" />
+        <MetricCard title="People in System" value={realStats.userCount} helper={`${overallStats.userCount} total available`} icon={<Users className="h-5 w-5" />} tone="blue" />
+        <MetricCard title="Active Response Team" value={realStats.activeResponders} helper="Response team accounts ready to use" icon={<ShieldCheck className="h-5 w-5" />} tone="green" />
+        <MetricCard title="Support Available" value={realStats.availableResources} helper={`${resources.length} support options total`} icon={<BarChart3 className="h-5 w-5" />} tone="green" />
+        <MetricCard title="System Certainty" value={`${confidencePct}%`} helper="Average certainty from system review" icon={<Sparkles className="h-5 w-5" />} tone="purple" />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Panel title="Incident Trend" subtitle="Built from real incident report dates">
+        <Panel title="Reports Over Time" subtitle="Built from real report dates">
           {chartData.trend.length ? (
             <ResponsiveContainer width="100%" height={290}>
               <LineChart data={chartData.trend}>
@@ -308,9 +352,9 @@ export default function Analytics() {
                 <Line type="monotone" dataKey="incidents" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
-          ) : <EmptyBlock text="No incident trend data is available yet." />}
+          ) : <EmptyBlock text="No report trend is available yet." />}
         </Panel>
-        <Panel title="Status Distribution" subtitle="Current incident status totals">
+        <Panel title="Progress Breakdown" subtitle="Current report progress totals">
           {chartData.status.length ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
               <ResponsiveContainer width="100%" height={260}>
@@ -323,37 +367,37 @@ export default function Analytics() {
               </ResponsiveContainer>
               <LegendRows rows={chartData.status} total={filteredIncidents.length} />
             </div>
-          ) : <EmptyBlock text="No status data is available yet." />}
+          ) : <EmptyBlock text="No progress data is available yet." />}
         </Panel>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <Panel title="Users by Role" subtitle="Real user totals by role">
-          {chartData.roles.length ? <SimpleBarChart data={chartData.roles} color="#2563eb" /> : <EmptyBlock text="No user role data is available yet." />}
+        <Panel title="People by Role" subtitle="People grouped by their work area">
+          {chartData.roles.length ? <SimpleBarChart data={chartData.roles} color="#2563eb" /> : <EmptyBlock text="No people data is available yet." />}
         </Panel>
-        <Panel title="Incident Categories" subtitle="Real category totals">
-          {chartData.categories.length ? <SimpleBarChart data={chartData.categories} color="#8b5cf6" /> : <EmptyBlock text="No category data is available yet." />}
+        <Panel title="Kinds of Help" subtitle="Reports grouped by kind of help">
+          {chartData.categories.length ? <SimpleBarChart data={chartData.categories} color="#8b5cf6" /> : <EmptyBlock text="No help-type data is available yet." />}
         </Panel>
       </section>
 
       <section className="grid gap-6">
-        <Panel title="AI Insights" subtitle="Generated only from live analytics values">
+        <Panel title="Helpful Notes" subtitle="Based only on current report information">
           <div className="space-y-3">
-            {insights.length ? insights.map((insight) => <div key={insight} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700">{insight}</div>) : <EmptyBlock text="No insights can be generated until more data is available." />}
+            {insights.length ? insights.map((insight) => <div key={insight} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-700">{insight}</div>) : <EmptyBlock text="More notes will appear when more information is available." />}
           </div>
         </Panel>
-        <Panel title="Incident Report Grid" subtitle={`${sortedIncidents.length} incidents match the current filters`}>
+        <Panel title="Emergency Report List" subtitle={`${sortedIncidents.length} reports match your choices`}>
           {sortedIncidents.length === 0 ? (
             <EmptyReports onReset={resetFilters} />
           ) : (
             <>
               <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,320px)_1fr] lg:items-end">
-                <FilterSelect labelText="Incident Report" value={incidentReportFilter} onChange={(value) => { setIncidentReportFilter(value as IncidentReportFilter); setPage(1); }} options={incidentReportFilterOptions.map((option) => option.value)} display={(value) => incidentReportFilterOptions.find((option) => option.value === value)?.label ?? value} />
+                <FilterSelect labelText="Report view" value={incidentReportFilter} onChange={(value) => { setIncidentReportFilter(value as IncidentReportFilter); setPage(1); }} options={incidentReportFilterOptions.map((option) => option.value)} display={(value) => incidentReportFilterOptions.find((option) => option.value === value)?.label ?? value} />
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-slate-500">{selectedRows.length} selected. Export actions use selected rows first.</p>
+                  <p className="text-sm text-slate-500">{selectedRows.length} selected. Downloads use selected reports first.</p>
                   <div className="flex gap-2">
-                    <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Export rows" variant="secondary" />
-                    <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="PDF rows" variant="secondary" />
+                    <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Download rows" variant="secondary" />
+                    <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="Document rows" variant="secondary" />
                   </div>
                 </div>
               </div>
@@ -364,16 +408,16 @@ export default function Analytics() {
                       <th className="w-10 border-b border-slate-200 px-3 py-3 text-left">
                         <input type="checkbox" checked={pagedIncidents.length > 0 && pagedIncidents.every((incident) => selectedRows.includes(incident.id))} onChange={(event) => setSelectedRows(event.target.checked ? Array.from(new Set([...selectedRows, ...pagedIncidents.map((incident) => incident.id)])) : selectedRows.filter((id) => !pagedIncidents.some((incident) => incident.id === id)))} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
                       </th>
-                      <SortableTh text="Reference" sortKey="referenceNumber" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Category" sortKey="type" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Priority" sortKey="priority" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Status" sortKey="status" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Reporter" sortKey="reporterName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Assigned responder" sortKey="assignedResponderName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <Th>Location</Th>
-                      <SortableTh text="Created" sortKey="reportedAt" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <Th>AI Source</Th>
-                      <SortableTh text="AI Confidence" sortKey="aiConfidenceScore" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Report number" sortKey="referenceNumber" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Kind of help" sortKey="type" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Urgency" sortKey="priority" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Progress" sortKey="status" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Reported by" sortKey="reporterName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Response team member" sortKey="assignedResponderName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <Th>Place</Th>
+                      <SortableTh text="Reported on" sortKey="reportedAt" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <Th>Review type</Th>
+                      <SortableTh text="System certainty" sortKey="aiConfidenceScore" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                     </tr>
                   </thead>
                   <tbody>
@@ -391,13 +435,13 @@ export default function Analytics() {
                           {incident.assignedResponderName ? (
                             <div>
                               <p className="font-bold text-slate-800">{incident.assignedResponderName}</p>
-                              <p className="mt-1 text-xs text-slate-500">{incident.responderStatus ? label(incident.responderStatus) : "Assigned"}{incident.etaMinutes ? ` - ETA ${incident.etaMinutes} min` : ""}</p>
+                              <p className="mt-1 text-xs text-slate-500">{incident.responderStatus ? label(incident.responderStatus) : "Assigned"}{incident.etaMinutes ? ` - Arrival time ${incident.etaMinutes} min` : ""}</p>
                             </div>
                           ) : (
-                            <span className="text-slate-400">Unassigned</span>
+                            <span className="text-slate-400">No team assigned</span>
                           )}
                         </td>
-                        <td className="break-words border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{incident.manualLocation || "GPS coordinates"}</td>
+                        <td className="break-words border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{incident.manualLocation || "Shared location"}</td>
                         <td className="border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td>
                         <td className="border-b border-slate-100 px-3 py-3 text-sm font-semibold text-slate-700">{aiSourceLabel(incident)}</td>
                         <td className="border-b border-slate-100 px-3 py-3 text-sm font-bold text-purple-700">{Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</td>
@@ -442,7 +486,7 @@ function matchesIncidentReportFilter(incident: IncidentResponse, filter: Inciden
 function buildRealStats(incidents: IncidentResponse[], users: UserResponse[], resources: ResourceResponse[], analytics: AnalyticsResponse): RealStats {
   const confidenceScores = incidents.map((incident) => incident.aiConfidenceScore).filter((score): score is number => typeof score === "number");
   const hasIncidents = incidents.length > 0;
-  const hasUsers = users.length > 0;
+  const hasPeople = users.length > 0;
   const hasResources = resources.length > 0;
   const avgConfidence = confidenceScores.length ? Math.round((confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length) * 100) : Math.round((analytics.aiAverageConfidence ?? 0) * 100);
   return {
@@ -450,8 +494,8 @@ function buildRealStats(incidents: IncidentResponse[], users: UserResponse[], re
     activeIncidents: hasIncidents ? incidents.filter((incident) => isActiveIncident(incident.status)).length : analytics.activeIncidents,
     resolvedIncidents: hasIncidents ? incidents.filter((incident) => incident.status === "RESOLVED").length : analytics.resolvedIncidents,
     pendingIncidentQueue: hasIncidents ? incidents.filter((incident) => incident.status === "PENDING" || incident.status === "PRIORITIZED").length : analytics.pendingIncidentQueue,
-    userCount: hasUsers ? users.length : analytics.userCount,
-    activeResponders: hasUsers ? users.filter((user) => user.role === "RESPONDER" && user.enabled && !user.accountLocked).length : analytics.activeResponders,
+    userCount: hasPeople ? users.length : analytics.userCount,
+    activeResponders: hasPeople ? users.filter((user) => user.role === "RESPONDER" && user.enabled && !user.accountLocked).length : analytics.activeResponders,
     availableResources: hasResources ? resources.filter((resource) => resource.status === "AVAILABLE").length : analytics.availableResources,
     aiAverageConfidence: avgConfidence,
   };
@@ -476,25 +520,25 @@ function buildInsightsFromRecords(realStats: RealStats, filteredStats: RealStats
   const insights: string[] = [];
   const topType = countRows(incidents, (incident) => incident.type)[0];
   const topStatus = countRows(incidents, (incident) => incident.status)[0];
-  if (topType) insights.push(`${topType.name} is the most common category in the current report view with ${topType.value} case${topType.value === 1 ? "" : "s"}.`);
-  if (filteredStats.pendingIncidentQueue > 0) insights.push(`${filteredStats.pendingIncidentQueue} filtered incident${filteredStats.pendingIncidentQueue === 1 ? "" : "s"} are still pending or prioritized.`);
-  if (topStatus) insights.push(`${topStatus.name} is currently the largest status group in the report grid.`);
-  if (realStats.activeResponders > 0) insights.push(`${realStats.activeResponders} enabled responder account${realStats.activeResponders === 1 ? "" : "s"} are available in user records.`);
-  if (realStats.aiAverageConfidence > 0) insights.push(`Average triage confidence across loaded incidents is ${realStats.aiAverageConfidence}%.`);
+  if (topType) insights.push(`${topType.name} is the most common kind of help in this view, with ${topType.value} report${topType.value === 1 ? "" : "s"}.`);
+  if (filteredStats.pendingIncidentQueue > 0) insights.push(`${filteredStats.pendingIncidentQueue} report${filteredStats.pendingIncidentQueue === 1 ? " is" : "s are"} still waiting or already reviewed.`);
+  if (topStatus) insights.push(`${topStatus.name} is currently the largest progress group in the report list.`);
+  if (realStats.activeResponders > 0) insights.push(`${realStats.activeResponders} response team account${realStats.activeResponders === 1 ? " is" : "s are"} ready to use.`);
+  if (realStats.aiAverageConfidence > 0) insights.push(`The system certainty across loaded reports is ${realStats.aiAverageConfidence}%.`);
   return insights;
 }
 
 function summaryRows(stats: RealStats, logs: AuditLogResponse[]) {
   return [
-    { metric: "Total Incidents", value: stats.incidentCount },
-    { metric: "Open Incidents", value: stats.activeIncidents },
-    { metric: "Resolved Incidents", value: stats.resolvedIncidents },
-    { metric: "Pending Queue", value: stats.pendingIncidentQueue },
-    { metric: "Total Users", value: stats.userCount },
-    { metric: "Active Responders", value: stats.activeResponders },
-    { metric: "Resources Available", value: stats.availableResources },
-    { metric: "Audit Events", value: logs.length },
-    { metric: "Average AI Confidence", value: `${stats.aiAverageConfidence}%` },
+    { metric: "Total Reports", value: stats.incidentCount },
+    { metric: "Open Reports", value: stats.activeIncidents },
+    { metric: "Closed Reports", value: stats.resolvedIncidents },
+    { metric: "Waiting List", value: stats.pendingIncidentQueue },
+    { metric: "People in System", value: stats.userCount },
+    { metric: "Active Response Team", value: stats.activeResponders },
+    { metric: "Support Available", value: stats.availableResources },
+    { metric: "Activity Records", value: logs.length },
+    { metric: "System Certainty", value: `${stats.aiAverageConfidence}%` },
   ];
 }
 
@@ -505,10 +549,10 @@ function incidentExportRows(incidents: IncidentResponse[]) {
     priority: label(incident.priority),
     status: label(incident.status),
     reporter: incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen",
-    assignedResponder: incident.assignedResponderName || "Unassigned",
+    assignedResponder: incident.assignedResponderName || "No team assigned",
     responderStatus: incident.responderStatus ? label(incident.responderStatus) : "",
     etaMinutes: incident.etaMinutes ?? "",
-    location: incident.manualLocation || "GPS coordinates",
+    location: incident.manualLocation || "Shared location",
     created: new Date(incident.reportedAt).toLocaleString(),
     aiSource: aiSourceLabel(incident),
     aiConfidence: `${Math.round((incident.aiConfidenceScore ?? 0) * 100)}%`,
@@ -519,29 +563,29 @@ function buildPdfSections(options: ExportOptions, stats: RealStats, users: UserR
   const sections: PdfSection[] = [];
   if (options.summary) {
     sections.push({
-      title: "Executive Summary",
-      headers: ["Metric", "Value"],
+      title: "Summary",
+      headers: ["Item", "Number"],
       rows: summaryRows(stats, allLogs).map((row) => [row.metric, row.value]),
     });
   }
   if (options.incidents) {
     sections.push({
-      title: options.selectedOnly && incidents.length ? "Selected Incident Rows" : "Filtered Incident Rows",
-      headers: ["Reference", "Category", "Priority", "Status", "Reporter", "Responder", "Location", "Created", "AI"],
+      title: options.selectedOnly && incidents.length ? "Selected reports" : "Reports shown",
+      headers: ["Report number", "Kind of help", "Urgency", "Progress", "Reported by", "Team member", "Place", "Reported on", "System certainty"],
       rows: incidentExportRows(incidents).map((row) => [row.reference, row.category, row.priority, row.status, row.reporter, row.assignedResponder, row.location, row.created, row.aiConfidence]),
     });
   }
   if (options.users) {
     sections.push({
-      title: "Users",
-      headers: ["Name", "Email", "Role", "Status", "Created"],
+      title: "People",
+      headers: ["Name", "Email", "Role", "Account state", "Created"],
       rows: users.map((user) => [user.fullName, user.email, user.role, user.accountLocked ? "Locked" : user.enabled ? "Active" : "Disabled", new Date(user.createdAt).toLocaleDateString()]),
     });
   }
   if (options.auditLogs) {
     sections.push({
-      title: "Audit Logs",
-      headers: ["Action", "Actor", "Entity", "Created"],
+      title: "Activity History",
+      headers: ["Action", "Person", "Area", "Created"],
       rows: logs.map((log) => [log.action, log.actorEmail, log.entityType ?? "System", new Date(log.createdAt).toLocaleString()]),
     });
   }
@@ -624,9 +668,9 @@ function makePdf(title: string, sections: PdfSection[], meta: { filters: string[
     rect(0, 0, pageWidth, pageHeight, "0.97 0.98 1");
     rect(0, pageHeight - 88, pageWidth, 88, "0.05 0.16 0.36");
     centeredText(title, pageHeight - 38, 21, "1 1 1");
-    centeredText("Operational report generated from selected live system records", pageHeight - 58, 9, "0.83 0.9 1");
+    centeredText("Operational report made from the selected live records", pageHeight - 58, 9, "0.83 0.9 1");
     rect(margin, pageHeight - 126, contentWidth, 28, "0.9 0.95 1");
-    centeredText(`Generated ${new Date().toLocaleString()}    |    ${meta.filters.join("    |    ")}`, pageHeight - 116, 8, "0.05 0.16 0.36");
+    centeredText(`Made ${new Date().toLocaleString()}    |    ${meta.filters.join("    |    ")}`, pageHeight - 116, 8, "0.05 0.16 0.36");
     y = pageHeight - 160;
   };
 
@@ -699,7 +743,7 @@ function makePdf(title: string, sections: PdfSection[], meta: { filters: string[
   startPage();
   if (sections.length === 0) {
     rect(margin, y - 40, contentWidth, 70, "1 1 1");
-    centeredText("No export sections were selected, or no rows matched the current filters.", y - 4, 11, "0.38 0.45 0.55");
+    centeredText("Nothing was selected, or no records matched your choices.", y - 4, 11, "0.38 0.45 0.55");
   } else {
     sections.forEach(drawTable);
   }
@@ -841,9 +885,9 @@ function EmptyReports({ onReset }: { onReset: () => void }) {
   return (
     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
       <Search className="mx-auto h-9 w-9 text-blue-500" />
-      <h3 className="mt-3 text-lg font-bold text-slate-950">No reports match your filters.</h3>
-      <p className="mt-1 text-sm text-slate-500">Try changing your filters or generate a new report.</p>
-      <button onClick={onReset} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><RotateCcw className="h-4 w-4" />Reset Filters</button>
+      <h3 className="mt-3 text-lg font-bold text-slate-950">No reports match your choices.</h3>
+      <p className="mt-1 text-sm text-slate-500">Try changing your choices or making a new report.</p>
+      <button onClick={onReset} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><RotateCcw className="h-4 w-4" />Clear choices</button>
     </div>
   );
 }
@@ -881,33 +925,33 @@ function ExportModal({ open, options, selectedCount, filteredCount, onChange, on
       <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
           <div>
-            <h2 className="text-xl font-bold text-slate-950">Export report PDF</h2>
-            <p className="mt-1 text-sm text-slate-500">Choose exactly what should be included in the downloaded PDF.</p>
+            <h2 className="text-xl font-bold text-slate-950">Download report document</h2>
+            <p className="mt-1 text-sm text-slate-500">Choose what should be included in the downloaded document.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close export modal"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close download window"><X className="h-5 w-5" /></button>
         </div>
         <div className="space-y-4 p-5">
           <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            <p className="font-bold">Current export scope</p>
-            <p className="mt-1">{options.selectedOnly && selectedCount > 0 ? `${selectedCount} selected incident row${selectedCount === 1 ? "" : "s"}` : `${filteredCount} filtered incident row${filteredCount === 1 ? "" : "s"}`}</p>
+            <p className="font-bold">Current download choice</p>
+            <p className="mt-1">{options.selectedOnly && selectedCount > 0 ? `${selectedCount} selected report${selectedCount === 1 ? "" : "s"}` : `${filteredCount} matching report${filteredCount === 1 ? "" : "s"}`}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <ExportCheck labelText="Executive summary" checked={options.summary} onChange={(checked) => update("summary", checked)} />
-            <ExportCheck labelText="Incident rows" checked={options.incidents} onChange={(checked) => update("incidents", checked)} />
-            <ExportCheck labelText="Users" checked={options.users} onChange={(checked) => update("users", checked)} />
-            <ExportCheck labelText="Audit logs" checked={options.auditLogs} onChange={(checked) => update("auditLogs", checked)} />
+            <ExportCheck labelText="Summary" checked={options.summary} onChange={(checked) => update("summary", checked)} />
+            <ExportCheck labelText="Report list" checked={options.incidents} onChange={(checked) => update("incidents", checked)} />
+            <ExportCheck labelText="People" checked={options.users} onChange={(checked) => update("users", checked)} />
+            <ExportCheck labelText="Activity history" checked={options.auditLogs} onChange={(checked) => update("auditLogs", checked)} />
           </div>
           <label className={`flex items-start gap-3 rounded-xl border p-4 ${selectedCount === 0 ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-200 bg-white text-slate-700"}`}>
             <input type="checkbox" disabled={selectedCount === 0} checked={options.selectedOnly && selectedCount > 0} onChange={(event) => update("selectedOnly", event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" />
             <span>
-              <span className="block font-bold">Use selected incident rows only</span>
-              <span className="text-sm">{selectedCount === 0 ? "Select rows in the incident grid to enable this option." : "When off, the PDF uses all filtered incident rows."}</span>
+              <span className="block font-bold">Use selected reports only</span>
+              <span className="text-sm">{selectedCount === 0 ? "Select reports in the list to use this option." : "When off, the document uses all matching reports."}</span>
             </span>
           </label>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 p-5">
           <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button disabled={sectionCount === 0} onClick={onExport} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Download className="h-4 w-4" />Download PDF</button>
+          <button disabled={sectionCount === 0} onClick={onExport} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Download className="h-4 w-4" />Download document</button>
         </div>
       </section>
     </div>
@@ -932,10 +976,10 @@ function ScheduleModal({ open, onClose, onSave }: { open: boolean; onClose: () =
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
           <div>
-            <h2 className="text-xl font-bold text-slate-950">Schedule report</h2>
-            <p className="mt-1 text-sm text-slate-500">Create a browser-session schedule alert for recurring exports.</p>
+            <h2 className="text-xl font-bold text-slate-950">Set report reminder</h2>
+            <p className="mt-1 text-sm text-slate-500">Set a reminder in this browser for regular report downloads.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close schedule modal"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close reminder window"><X className="h-5 w-5" /></button>
         </div>
         <div className="space-y-4 p-5">
           <label className="block">
@@ -947,17 +991,17 @@ function ScheduleModal({ open, onClose, onSave }: { open: boolean; onClose: () =
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-bold text-slate-700">Recipient</span>
+            <span className="mb-1 block text-sm font-bold text-slate-700">Send to</span>
             <input value={recipient} onChange={(event) => setRecipient(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
           </label>
           <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
             <p className="font-bold">Preview</p>
-            <p className="mt-1">{frequency} reports will be prepared for {recipient || "the selected recipient"} using the current filters.</p>
+            <p className="mt-1">{frequency} reports will be prepared for {recipient || "the selected recipient"} using the choices shown here.</p>
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 p-5">
           <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button onClick={onSave} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Send className="h-4 w-4" />Save schedule</button>
+          <button onClick={onSave} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Send className="h-4 w-4" />Save reminder</button>
         </div>
       </section>
     </div>
@@ -978,3 +1022,10 @@ function statusTone(status: IncidentStatus) {
   if (status === "PRIORITIZED") return "purple";
   return "blue";
 }
+
+
+
+
+
+
+

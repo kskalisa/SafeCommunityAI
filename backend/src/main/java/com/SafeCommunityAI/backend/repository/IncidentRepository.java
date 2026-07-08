@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 
 public interface IncidentRepository extends JpaRepository<Incident, Long> {
+    List<Incident> findAllByOrderByReportedAtDesc();
     List<Incident> findByReporterOrderByReportedAtDesc(User reporter);
     List<Incident> findByStatusOrderByReportedAtAsc(IncidentStatus status);
     long countByStatus(IncidentStatus status);

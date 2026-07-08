@@ -30,7 +30,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     @Transactional(readOnly = true)
     public Map<String, Object> operationsAnalytics() {
-        List<Incident> incidents = incidentRepository.findAll();
+        List<Incident> incidents = incidentRepository.findAllByOrderByReportedAtDesc();
         List<DispatchAssignment> assignments = assignmentRepository.findAll();
         long activeIncidents = incidents.stream().filter(this::isActive).count();
         long resolvedIncidents = incidents.stream().filter(i -> i.getStatus() == IncidentStatus.RESOLVED).count();
@@ -54,8 +54,6 @@ public class AnalyticsServiceImpl implements AnalyticsService {
         data.put("dailyIncidentTrend", dailyIncidentTrend(incidents));
         data.put("responderPerformance", responderPerformance(assignments));
         data.put("recentIncidents", incidents.stream()
-                .sorted(Comparator.comparing(Incident::getReportedAt, Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(25)
                 .map(mapper::toIncidentResponse)
                 .toList());
         return data;

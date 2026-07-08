@@ -39,11 +39,19 @@ export default function DispatcherLiveMap() {
 
   const selectedIncident = useMemo(() => incidents.find((incident) => incident.id === selectedIncidentId) ?? incidents[0], [incidents, selectedIncidentId]);
   const availableResources = useMemo(() => resources.filter((resource) => resource.status === "AVAILABLE"), [resources]);
+  const responderLocations = useMemo(() => {
+    const seen = new Set<number>();
+    return locations.filter((location) => {
+      if (location.role !== "RESPONDER" || seen.has(location.userId)) return false;
+      seen.add(location.userId);
+      return true;
+    });
+  }, [locations]);
   const availableResponders = responders.filter((responder) => responder.availabilityStatus === "AVAILABLE");
   const mapRoutes = useMemo(() => {
-    const route = buildSelectedIncidentRoute(selectedIncident, locations);
+    const route = buildSelectedIncidentRoute(selectedIncident, responderLocations);
     return route ? [route] : [];
-  }, [locations, selectedIncident]);
+  }, [responderLocations, selectedIncident]);
   const mapMarkers: MapMarker[] = [
     ...incidents
       .filter(hasIncidentGps)
@@ -57,7 +65,7 @@ export default function DispatcherLiveMap() {
         actionLabel: "Open route",
         tone: selectedIncident?.id === incident.id ? "red" : incident.priority === "CRITICAL" ? "red" : "amber",
       } satisfies MapMarker)),
-    ...locations.map((location) => ({
+    ...responderLocations.map((location) => ({
       id: `location-${location.id}`,
       lat: location.latitude,
       lng: location.longitude,
@@ -68,7 +76,7 @@ export default function DispatcherLiveMap() {
         { label: "Role", value: label(location.role) },
         { label: "Updated", value: new Date(location.capturedAt).toLocaleString() },
       ],
-      tone: location.role === "RESPONDER" ? "green" : "blue",
+      tone: "green",
     } satisfies MapMarker)),
   ];
   const mapCenter = selectedIncident && hasIncidentGps(selectedIncident) ? { lat: selectedIncident.latitude as number, lng: selectedIncident.longitude as number } : undefined;
@@ -91,6 +99,7 @@ export default function DispatcherLiveMap() {
       <div className="grid gap-6 lg:grid-cols-4">
         <div className="lg:col-span-3">
           <RealTimeMap markers={mapMarkers} initialCenter={mapCenter} routes={mapRoutes} onMarkerClick={handleMarkerClick} />
+          {!loading && responderLocations.length === 0 ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">No responder GPS has been shared yet. Ask responders to use Share GPS now or open GPS & Navigation and allow location access.</div> : null}
         </div>
 
         <div className="space-y-5">
@@ -110,7 +119,7 @@ export default function DispatcherLiveMap() {
           </section>
 
           <div className="grid grid-cols-2 gap-3">
-            <Summary icon={<Radio className="h-5 w-5 text-emerald-600" />} label="Shared locations" value={locations.length} />
+            <Summary icon={<Radio className="h-5 w-5 text-emerald-600" />} label="Responder locations" value={responderLocations.length} />
             <Summary icon={<Navigation className="h-5 w-5 text-emerald-600" />} label="Ready resources" value={availableResources.length} />
           </div>
 
@@ -212,3 +221,4 @@ function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+

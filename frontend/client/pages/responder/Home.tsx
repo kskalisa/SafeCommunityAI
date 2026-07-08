@@ -1,15 +1,45 @@
-import { Activity, AlertCircle, CheckCircle, Clock, MapPin, RadioTower, Route, ShieldCheck } from "lucide-react";
+import { Activity, AlertCircle, CheckCircle, Clock, LocateFixed, MapPin, RadioTower, Route, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { dispatchApi } from "@/services/api/dispatch";
+import { locationsApi } from "@/services/api/locations";
 
 export default function ResponderHome() {
+  const [sharingGps, setSharingGps] = useState(false);
+  const [gpsMessage, setGpsMessage] = useState<string | null>(null);
   const assignments = useQuery({ queryKey: ["assignments", "mine"], queryFn: dispatchApi.mine });
   const data = assignments.data ?? [];
   const pending = data.filter((item) => item.responderStatus === "ASSIGNED");
   const active = data.filter((item) => ["EN_ROUTE", "ON_SCENE", "TRANSPORTING"].includes(item.responderStatus) || ["EN_ROUTE", "ON_SCENE"].includes(item.incidentStatus));
   const completed = data.filter((item) => item.responderStatus === "COMPLETED");
   const next = active[0] ?? pending[0];
+
+  async function shareGpsNow() {
+    if (!navigator.geolocation) {
+      setGpsMessage("This browser cannot access GPS location.");
+      return;
+    }
+    setSharingGps(true);
+    setGpsMessage(null);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          await locationsApi.updateMe({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, consentProvided: true });
+          setGpsMessage(`GPS shared at ${new Date().toLocaleTimeString()}. Dispatch can now see your latest responder location.`);
+        } catch {
+          setGpsMessage("GPS was found, but could not be sent to dispatch. Please try again.");
+        } finally {
+          setSharingGps(false);
+        }
+      },
+      () => {
+        setGpsMessage("Allow location access to share your live responder GPS.");
+        setSharingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 },
+    );
+  }
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-5 lg:p-8">
@@ -61,6 +91,8 @@ export default function ResponderHome() {
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold text-slate-950">Quick actions</h2>
           <div className="mt-5 grid gap-3">
+            <button onClick={shareGpsNow} disabled={sharingGps} className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-left font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:opacity-60">{sharingGps ? "Sharing GPS..." : "Share GPS now"} <LocateFixed className="h-5 w-5 text-emerald-700" /></button>
+            {gpsMessage ? <p className="rounded-lg bg-slate-50 p-3 text-sm font-medium text-slate-700">{gpsMessage}</p> : null}
             <Link to="/dashboard/responder/incidents" className="flex items-center justify-between rounded-lg border border-slate-200 p-4 font-semibold text-slate-900 transition hover:bg-slate-50">Assigned incidents <AlertCircle className="h-5 w-5 text-red-600" /></Link>
             <Link to="/dashboard/responder/map" className="flex items-center justify-between rounded-lg border border-slate-200 p-4 font-semibold text-slate-900 transition hover:bg-slate-50">GPS & Navigation <MapPin className="h-5 w-5 text-blue-600" /></Link>
           </div>
@@ -76,3 +108,4 @@ function Metric({ title, value, icon, tone }: { title: string; value: number; ic
   const cls = { orange: "border-orange-500 text-orange-600", blue: "border-blue-500 text-blue-600", green: "border-emerald-500 text-emerald-600", slate: "border-slate-500 text-slate-600" }[tone];
   return <div className={`rounded-lg border border-l-4 border-slate-200 bg-white p-5 shadow-sm ${cls}`}><div className="mb-4 flex items-center justify-between"><h3 className="text-sm font-semibold text-slate-900">{title}</h3>{icon}</div><p className="text-3xl font-bold text-slate-950">{value}</p></div>;
 }
+
