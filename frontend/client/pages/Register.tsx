@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, HeartHandshake, RadioTower, Smartphone, Truck } from "lucide-react";
 import { authApi } from "@/services/api/auth";
@@ -17,7 +17,7 @@ export default function Register() {
   const [role, setRole] = useState<Role>("CITIZEN");
   const [showPassword, setShowPassword] = useState(false);
   const [locationConsent, setLocationConsent] = useState(false);
-  const [form, setForm] = useState({ fullName: "", email: "", password: "", phone: "", organization: "", certificationLicense: "", vehicleNumber: "" });
+  const [form, setForm] = useState({ fullName: "", email: "", password: "", phone: "", organization: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -111,11 +111,7 @@ export default function Register() {
             {role === "RESPONDER" ? (
               <div className="mt-6 rounded-lg border border-slate-200 p-4">
                 <p className="mb-4 font-semibold text-slate-950">Responder credentials</p>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <Field label="Team or organization" value={form.organization} onChange={(value) => update("organization", value)} placeholder="Optional" required={false} />
-                  <Field label="Certification" value={form.certificationLicense} onChange={(value) => update("certificationLicense", value)} placeholder="Optional" required={false} />
-                  <Field label="Vehicle number" value={form.vehicleNumber} onChange={(value) => update("vehicleNumber", value)} placeholder="Optional" required={false} />
-                </div>
+                <div className="grid gap-4 md:grid-cols-2"><Field label="Team or organization" value={form.organization} onChange={(value) => update("organization", value)} placeholder="Optional" required={false} /></div>
               </div>
             ) : null}
 
@@ -160,3 +156,4 @@ function PasswordField({ value, onChange, show, onToggle }: { value: string; onC
     </div>
   );
 }
+

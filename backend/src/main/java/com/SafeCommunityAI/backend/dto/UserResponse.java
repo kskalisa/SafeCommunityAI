@@ -2,6 +2,7 @@ package com.SafeCommunityAI.backend.dto;
 
 import com.SafeCommunityAI.backend.enums.Role;
 import java.time.Instant;
+import java.util.List;
 
 public record UserResponse(
         Long id,
@@ -13,5 +14,11 @@ public record UserResponse(
         boolean accountLocked,
         int failedLoginAttempts,
         Instant lastLoginAt,
-        Instant createdAt
+        Instant createdAt,
+        String organization,
+        String certificateFileName,
+        String certificateContentType,
+        Long certificateSizeBytes,
+        String certificateUrl,
+        List<ResourceSummaryResponse> resources
 ) {}

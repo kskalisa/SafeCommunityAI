@@ -4,6 +4,7 @@ import com.SafeCommunityAI.backend.enums.ResponderStatus;
 import com.SafeCommunityAI.backend.enums.VerificationStatus;
 
 import java.time.Instant;
+import java.util.List;
 
 public record ResponderDetailResponse(
         Long id,
@@ -12,8 +13,11 @@ public record ResponderDetailResponse(
         String phone,
         boolean enabled,
         String organization,
-        String certificationLicense,
-        String vehicleNumber,
+        String certificateFileName,
+        String certificateContentType,
+        Long certificateSizeBytes,
+        String certificateUrl,
+        List<ResourceSummaryResponse> resources,
         VerificationStatus verificationStatus,
         ResponderStatus availabilityStatus,
         Instant createdAt

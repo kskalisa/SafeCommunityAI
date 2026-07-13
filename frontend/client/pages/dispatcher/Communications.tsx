@@ -1,4 +1,4 @@
-import { Loader2, Mail, Megaphone, Phone, Radio, Send, Users } from "lucide-react";
+﻿import { Loader2, Mail, Megaphone, Phone, Radio, Send, Users } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { notificationsApi } from "@/services/api/notifications";
@@ -38,7 +38,7 @@ export default function Communications() {
             <label className="block text-sm font-semibold text-slate-900">Recipient
               <select value={recipientId} onChange={(event) => setRecipientId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2">
                 <option value="broadcast">All users</option>
-                {responderList.map((responder) => <option key={responder.id} value={responder.id}>{responder.fullName} {responder.vehicleNumber ? `- ${responder.vehicleNumber}` : ""}</option>)}
+                {responderList.map((responder) => <option key={responder.id} value={responder.id}>{responder.fullName}</option>)}
               </select>
             </label>
             <label className="block text-sm font-semibold text-slate-900">Title
@@ -78,7 +78,7 @@ export default function Communications() {
           {responderList.map((responder) => (
             <div key={responder.id} className="rounded-lg border border-slate-200 p-4">
               <p className="font-bold text-slate-950">{responder.fullName}</p>
-              <p className="mt-1 text-sm text-slate-500">{responder.organization || responder.vehicleNumber || responder.email}</p>
+              <p className="mt-1 text-sm text-slate-500">{responder.organization || responder.resources?.map((resource) => resource.name).join(", ") || responder.email}</p>
               <div className="mt-4 flex gap-2">
                 <a href={`mailto:${responder.email}`} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Mail className="h-4 w-4" /> Email</a>
                 <a href={responder.phone ? `tel:${responder.phone}` : undefined} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"><Phone className="h-4 w-4" /> Call</a>
@@ -91,3 +91,4 @@ export default function Communications() {
     </div>
   );
 }
+

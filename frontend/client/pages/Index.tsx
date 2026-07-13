@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -105,7 +105,7 @@ export default function Index() {
               <BellRing className="h-4 w-4 text-red-300" />
               Help reaches the right people faster
             </div>
-            <h1 className="text-5xl font-bold leading-tight text-white sm:text-6xl lg:text-7xl">
+            <h1 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
               SafeCommunity
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-100 sm:text-xl">
@@ -258,32 +258,20 @@ export default function Index() {
             </div>
           </div>
         </section>
-
-        <section className="border-y border-slate-200 bg-slate-950 px-4 py-16 sm:px-6 lg:px-8">
-          <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-white">Ready to try it?</h2>
-              <p className="mt-2 max-w-2xl text-slate-300">Sign in and explore how a request for help moves from a citizen to dispatch and responders.</p>
-            </div>
-            <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-700">
-              Go to sign in <ChevronRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </section>
       </main>
 
-      <footer className="bg-white px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 border-t border-slate-200 pt-8 md:flex-row md:items-center">
-          <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-600 text-white">
+      <footer className="bg-slate-950 px-4 py-10 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 border-t border-white/10 pt-8 md:flex-row md:items-center">
+          <p className="text-sm text-slate-300">2026 SafeCommunity. Built for safer communities.</p>
+          <div className="flex items-center gap-3 md:justify-end">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-600 text-white shadow-sm">
               <AlertCircle className="h-5 w-5" />
             </span>
-            <div>
-              <p className="font-bold text-slate-950">SafeCommunity</p>
-              <p className="text-sm text-slate-500">Helping communities respond with care.</p>
+            <div className="md:text-left">
+              <p className="font-bold text-white">SafeCommunity</p>
+              <p className="text-sm text-slate-300">Helping communities respond with care.</p>
             </div>
           </div>
-          <p className="text-sm text-slate-500">2026 SafeCommunity. Built for safer communities.</p>
         </div>
       </footer>
     </div>

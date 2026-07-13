@@ -8,8 +8,11 @@ import com.SafeCommunityAI.backend.enums.*;
 import com.SafeCommunityAI.backend.exception.BadRequestException;
 import com.SafeCommunityAI.backend.exception.ResourceNotFoundException;
 import com.SafeCommunityAI.backend.mapper.AppMapper;
+import com.SafeCommunityAI.backend.repository.DispatchAssignmentRepository;
 import com.SafeCommunityAI.backend.repository.IncidentRepository;
 import com.SafeCommunityAI.backend.repository.IncidentAttachmentRepository;
+import com.SafeCommunityAI.backend.repository.ResourceRepository;
+import com.SafeCommunityAI.backend.repository.ResponderProfileRepository;
 import com.SafeCommunityAI.backend.repository.UserRepository;
 import com.SafeCommunityAI.backend.repository.EmergencyContactRepository;
 import com.SafeCommunityAI.backend.service.AiTriageService;
@@ -43,6 +46,9 @@ public class IncidentServiceImpl implements IncidentService {
     private final AuditService auditService;
     private final EmergencyContactRepository emergencyContactRepository;
     private final IncidentAttachmentRepository incidentAttachmentRepository;
+    private final DispatchAssignmentRepository assignmentRepository;
+    private final ResponderProfileRepository responderProfileRepository;
+    private final ResourceRepository resourceRepository;
     private final AiTriageService aiTriageService;
 
     @Override
@@ -171,6 +177,7 @@ public class IncidentServiceImpl implements IncidentService {
             incident.setStatus(request.incidentStatus());
             if (request.incidentStatus() == IncidentStatus.RESOLVED) {
                 incident.setResolvedAt(Instant.now());
+                completeAssignmentsAndReleaseResources(incident);
             }
         }
         if (request.reason() != null && !request.reason().isBlank()) {
@@ -208,6 +215,26 @@ public class IncidentServiceImpl implements IncidentService {
         return saved.stream().map(mapper::toAttachmentResponse).toList();
     }
 
+    private void completeAssignmentsAndReleaseResources(Incident incident) {
+        assignmentRepository.findByIncident(incident).forEach(assignment -> {
+            if (assignment.getStatus() != ResponderStatus.COMPLETED) {
+                assignment.setStatus(ResponderStatus.COMPLETED);
+                assignment.setCompletedAt(Instant.now());
+                assignmentRepository.save(assignment);
+            }
+            responderProfileRepository.findByUser(assignment.getResponder()).ifPresent(profile -> {
+                profile.setAvailabilityStatus(ResponderStatus.AVAILABLE);
+                profile.getResources().stream()
+                        .filter(resource -> resource.getAssignedIncident() != null && resource.getAssignedIncident().getId().equals(incident.getId()))
+                        .forEach(resource -> {
+                            resource.setStatus(ResourceStatus.AVAILABLE);
+                            resource.setAssignedIncident(null);
+                            resourceRepository.save(resource);
+                        });
+                responderProfileRepository.save(profile);
+            });
+        });
+    }
     private void validateIncidentRequest(IncidentRequest request) {
         boolean hasDescription = hasText(request.description()) && request.description().trim().length() >= 12;
         boolean hasManualLocation = hasText(request.manualLocation());

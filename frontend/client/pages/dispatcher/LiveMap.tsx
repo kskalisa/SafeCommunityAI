@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Loader2, MapPin, Navigation, Radio, Users } from "lucide-react";
 import RealTimeMap, { type MapMarker, type MapRoute } from "@/components/maps/RealTimeMap";
 import { incidentsApi } from "@/services/api/incidents";
@@ -111,7 +111,7 @@ export default function DispatcherLiveMap() {
               {availableResponders.slice(0, 5).map((responder) => (
                 <div key={responder.id} className="rounded-lg bg-slate-50 p-3 text-sm">
                   <p className="font-medium text-slate-900">{responder.fullName}</p>
-                  <p className="text-xs text-slate-500">{responder.vehicleNumber || responder.organization || responder.email}</p>
+                  <p className="text-xs text-slate-500">{responder.resources?.map((resource) => resource.name).join(", ") || responder.organization || responder.email}</p>
                 </div>
               ))}
               {!loading && availableResponders.length === 0 ? <p className="text-sm text-slate-500">No responders are marked available.</p> : null}
@@ -221,4 +221,5 @@ function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
 

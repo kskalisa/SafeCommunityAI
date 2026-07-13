@@ -56,10 +56,8 @@ public class AuthServiceImpl implements AuthService {
             responderProfileRepository.save(ResponderProfile.builder()
                     .user(user)
                     .organization(request.organization())
-                    .certificationLicense(request.certificationLicense())
-                    .vehicleNumber(request.vehicleNumber())
                     .verificationStatus(VerificationStatus.PENDING)
-                    .availabilityStatus(ResponderStatus.OFFLINE)
+                    .availabilityStatus(ResponderStatus.AVAILABLE)
                     .build());
         }
         auditService.log("USER_REGISTERED", user.getEmail(), "User", user.getId(), "Role: " + user.getRole());
@@ -111,3 +109,4 @@ public class AuthServiceImpl implements AuthService {
         return new AuthResponse(jwtService.generateToken(user), user.getId(), user.getFullName(), user.getEmail(), user.getRole());
     }
 }
+

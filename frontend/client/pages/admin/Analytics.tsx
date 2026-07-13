@@ -3,17 +3,14 @@ import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BarChart3,
-  CalendarClock,
   CheckCircle2,
   Clock3,
   Download,
   FileText,
   Filter,
-  Printer,
   RefreshCw,
   RotateCcw,
   Search,
-  Send,
   ShieldCheck,
   Sparkles,
   Users,
@@ -35,7 +32,7 @@ import {
 } from "recharts";
 import { adminApi } from "@/services/api/admin";
 import { resourcesApi } from "@/services/api/resources";
-import { downloadCsv } from "@/lib/export";
+import { downloadCsv, downloadPdf, type PdfSection } from "@/lib/export";
 import type { AnalyticsResponse, AuditLogResponse, IncidentResponse, IncidentStatus, PriorityLevel, ResourceResponse, UserResponse } from "@/types/api";
 
 type SortKey = "referenceNumber" | "type" | "priority" | "status" | "reporterName" | "assignedResponderName" | "reportedAt" | "aiConfidenceScore";
@@ -48,11 +45,6 @@ type ExportOptions = {
   users: boolean;
   auditLogs: boolean;
   selectedOnly: boolean;
-};
-type PdfSection = {
-  title: string;
-  headers?: string[];
-  rows: Array<Array<string | number>>;
 };
 type RealStats = {
   incidentCount: number;
@@ -161,8 +153,6 @@ export default function Analytics() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleSaved, setScheduleSaved] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     summary: true,
@@ -260,7 +250,6 @@ export default function Analytics() {
     setExportOpen(false);
   };
 
-  const printReport = () => window.print();
   const toggleSort = (key: SortKey) => {
     setSortDirection(sortKey === key && sortDirection === "asc" ? "desc" : "asc");
     setSortKey(key);
@@ -276,25 +265,12 @@ export default function Analytics() {
             <p className="mt-3 text-sm text-slate-500">Live data loaded from {allIncidents.length} report{allIncidents.length === 1 ? "" : "s"}, {users.length} person record{users.length === 1 ? "" : "s"}, and {resources.length} support option{resources.length === 1 ? "" : "s"}.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="Download document" />
-            <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Download spreadsheet" variant="secondary" />
-            <ActionButton onClick={printReport} icon={<Printer className="h-4 w-4" />} label="Print" variant="secondary" />
-            <ActionButton onClick={() => setScheduleOpen(true)} icon={<CalendarClock className="h-4 w-4" />} label="Reminder" variant="secondary" />
+            <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="PDF" />
+            <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="CSV" variant="secondary" />
             <ActionButton onClick={refetchAll} icon={<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />} label="Refresh" variant="ghost" />
           </div>
         </div>
       </header>
-
-      {scheduleSaved ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
-          <CheckCircle2 className="mt-0.5 h-5 w-5" />
-          <div>
-            <p className="font-bold">Report reminder saved</p>
-            <p className="text-sm">A report reminder has been set for this browser session.</p>
-          </div>
-          <button onClick={() => setScheduleSaved(false)} className="ml-auto rounded-lg p-1 hover:bg-emerald-100" aria-label="Dismiss alert"><X className="h-4 w-4" /></button>
-        </div>
-      ) : null}
 
       {dataErrors.length ? (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm">
@@ -393,13 +369,7 @@ export default function Analytics() {
             <>
               <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,320px)_1fr] lg:items-end">
                 <FilterSelect labelText="Report view" value={incidentReportFilter} onChange={(value) => { setIncidentReportFilter(value as IncidentReportFilter); setPage(1); }} options={incidentReportFilterOptions.map((option) => option.value)} display={(value) => incidentReportFilterOptions.find((option) => option.value === value)?.label ?? value} />
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm text-slate-500">{selectedRows.length} selected. Downloads use selected reports first.</p>
-                  <div className="flex gap-2">
-                    <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="Download rows" variant="secondary" />
-                    <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="Document rows" variant="secondary" />
-                  </div>
-                </div>
+                <p className="text-sm text-slate-500">{selectedRows.length} selected. Use the page PDF or CSV actions above to export matching reports.</p>
               </div>
               <div className="overflow-hidden rounded-xl border border-slate-200">
                 <table className="w-full table-fixed border-separate border-spacing-0">
@@ -408,6 +378,7 @@ export default function Analytics() {
                       <th className="w-10 border-b border-slate-200 px-3 py-3 text-left">
                         <input type="checkbox" checked={pagedIncidents.length > 0 && pagedIncidents.every((incident) => selectedRows.includes(incident.id))} onChange={(event) => setSelectedRows(event.target.checked ? Array.from(new Set([...selectedRows, ...pagedIncidents.map((incident) => incident.id)])) : selectedRows.filter((id) => !pagedIncidents.some((incident) => incident.id === id)))} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
                       </th>
+                      <Th>#</Th>
                       <SortableTh text="Report number" sortKey="referenceNumber" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <SortableTh text="Kind of help" sortKey="type" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <SortableTh text="Urgency" sortKey="priority" active={sortKey} direction={sortDirection} onSort={toggleSort} />
@@ -421,11 +392,12 @@ export default function Analytics() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pagedIncidents.map((incident) => (
+                    {pagedIncidents.map((incident, index) => (
                       <tr key={incident.id} className="hover:bg-blue-50/40">
                         <td className="border-b border-slate-100 px-3 py-3">
                           <input type="checkbox" checked={selectedRows.includes(incident.id)} onChange={(event) => setSelectedRows(event.target.checked ? [...selectedRows, incident.id] : selectedRows.filter((id) => id !== incident.id))} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
                         </td>
+                        <td className="border-b border-slate-100 px-3 py-3 text-sm font-bold text-slate-500">{(page - 1) * pageSize + index + 1}</td>
                         <td className="border-b border-slate-100 px-3 py-3 font-bold text-slate-950">{incident.referenceNumber}</td>
                         <td className="border-b border-slate-100 px-3 py-3 text-sm text-slate-600">{label(incident.type)}</td>
                         <td className="border-b border-slate-100 px-3 py-3"><Badge tone={priorityTone(incident.priority)}>{label(incident.priority)}</Badge></td>
@@ -471,7 +443,6 @@ export default function Analytics() {
         onClose={() => setExportOpen(false)}
         onExport={exportPdf}
       />
-      <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSave={() => { setScheduleOpen(false); setScheduleSaved(true); }} />
     </div>
   );
 }
@@ -543,7 +514,8 @@ function summaryRows(stats: RealStats, logs: AuditLogResponse[]) {
 }
 
 function incidentExportRows(incidents: IncidentResponse[]) {
-  return incidents.map((incident) => ({
+  return incidents.map((incident, index) => ({
+    no: index + 1,
     reference: incident.referenceNumber,
     category: label(incident.type),
     priority: label(incident.priority),
@@ -570,9 +542,9 @@ function buildPdfSections(options: ExportOptions, stats: RealStats, users: UserR
   }
   if (options.incidents) {
     sections.push({
-      title: options.selectedOnly && incidents.length ? "Selected reports" : "Reports shown",
-      headers: ["Report number", "Kind of help", "Urgency", "Progress", "Reported by", "Team member", "Place", "Reported on", "System certainty"],
-      rows: incidentExportRows(incidents).map((row) => [row.reference, row.category, row.priority, row.status, row.reporter, row.assignedResponder, row.location, row.created, row.aiConfidence]),
+      title: options.selectedOnly && incidents.length ? "Selected Emergency Report List" : "Emergency Report List",
+      headers: ["#", "Report number", "Kind of help", "Urgency", "Progress", "Reported by", "Team member", "Place", "Reported on", "System certainty"],
+      rows: incidentExportRows(incidents).map((row) => [row.no, row.reference, row.category, row.priority, row.status, row.reporter, row.assignedResponder, row.location, row.created, row.aiConfidence]),
     });
   }
   if (options.users) {
@@ -626,175 +598,6 @@ function trendRows(incidents: IncidentResponse[]) {
 
 function isActiveIncident(status: IncidentStatus) {
   return status !== "RESOLVED" && status !== "CANCELLED";
-}
-
-function downloadPdf(filename: string, title: string, sections: PdfSection[], meta: { filters: string[] }) {
-  const content = makePdf(title, sections, meta);
-  const blob = new Blob([content], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function makePdf(title: string, sections: PdfSection[], meta: { filters: string[] }) {
-  const pageWidth = 792;
-  const pageHeight = 612;
-  const margin = 36;
-  const contentWidth = pageWidth - margin * 2;
-  const pages: string[] = [];
-  let commands: string[] = [];
-  let y = pageHeight - 160;
-
-  const add = (command: string) => commands.push(command);
-  const textWidth = (value: string, size: number) => value.length * size * 0.48;
-  const text = (value: string, x: number, baseline: number, size = 9, color = "0.12 0.16 0.23") => {
-    add(`BT /F1 ${size} Tf ${x} ${baseline} Td ${color} rg (${escapePdf(value)}) Tj ET`);
-  };
-  const centeredText = (value: string, baseline: number, size = 12, color = "0.12 0.16 0.23") => {
-    text(value, Math.max(margin, (pageWidth - textWidth(value, size)) / 2), baseline, size, color);
-  };
-  const rect = (x: number, baseline: number, width: number, height: number, color: string) => {
-    add(`${color} rg ${x} ${baseline} ${width} ${height} re f`);
-  };
-  const line = (x1: number, y1: number, x2: number, y2: number, color = "0.82 0.87 0.93") => {
-    add(`${color} RG ${x1} ${y1} m ${x2} ${y2} l S`);
-  };
-
-  const startPage = () => {
-    commands = [];
-    rect(0, 0, pageWidth, pageHeight, "0.97 0.98 1");
-    rect(0, pageHeight - 88, pageWidth, 88, "0.05 0.16 0.36");
-    centeredText(title, pageHeight - 38, 21, "1 1 1");
-    centeredText("Operational report made from the selected live records", pageHeight - 58, 9, "0.83 0.9 1");
-    rect(margin, pageHeight - 126, contentWidth, 28, "0.9 0.95 1");
-    centeredText(`Made ${new Date().toLocaleString()}    |    ${meta.filters.join("    |    ")}`, pageHeight - 116, 8, "0.05 0.16 0.36");
-    y = pageHeight - 160;
-  };
-
-  const finishPage = () => {
-    line(margin, 42, pageWidth - margin, 42);
-    text("SafeCommunity", margin, 24, 8, "0.38 0.45 0.55");
-    centeredText(`Confidential emergency operations report - Page ${pages.length + 1}`, 24, 8, "0.38 0.45 0.55");
-    text(new Date().toLocaleDateString(), pageWidth - margin - 70, 24, 8, "0.38 0.45 0.55");
-    pages.push(commands.join("\n"));
-  };
-
-  const ensureSpace = (height: number) => {
-    if (y - height < 62) {
-      finishPage();
-      startPage();
-    }
-  };
-
-  const columnWidths = (headers: string[]) => {
-    if (headers.length === 2) return [contentWidth * 0.72, contentWidth * 0.28];
-    if (headers.length === 5) return [145, 205, 80, 90, 120];
-    if (headers.length === 4) return [190, 220, 140, 150];
-    if (headers.length === 8) return [100, 72, 62, 82, 96, 132, 118, 42];
-    if (headers.length === 9) return [82, 65, 55, 70, 82, 104, 92, 92, 32];
-    return headers.map(() => contentWidth / Math.max(1, headers.length));
-  };
-
-  const cellText = (value: string | number, width: number) => {
-    const textValue = String(value ?? "");
-    const maxChars = Math.max(5, Math.floor(width / 5.1));
-    return textValue.length > maxChars ? `${textValue.slice(0, Math.max(0, maxChars - 3))}...` : textValue;
-  };
-
-  const drawTable = (section: PdfSection) => {
-    const headers = section.headers ?? [];
-    const widths = columnWidths(headers);
-    const rowHeight = 24;
-    ensureSpace(48);
-    rect(margin, y - 18, contentWidth, 30, "0.05 0.16 0.36");
-    text(section.title, margin + 14, y - 6, 12, "1 1 1");
-    y -= 38;
-
-    if (!headers.length) return;
-    ensureSpace(rowHeight * 2);
-    rect(margin, y - 16, contentWidth, rowHeight, "0.91 0.95 1");
-    let x = margin;
-    headers.forEach((header, index) => {
-      text(header.toUpperCase(), x + 8, y - 7, 7, "0.26 0.36 0.52");
-      if (index > 0) line(x, y + 8, x, y - 16, "0.78 0.84 0.91");
-      x += widths[index] ?? 80;
-    });
-    y -= rowHeight;
-
-    section.rows.forEach((row, rowIndex) => {
-      ensureSpace(rowHeight + 8);
-      rect(margin, y - 16, contentWidth, rowHeight, rowIndex % 2 === 0 ? "1 1 1" : "0.96 0.98 1");
-      x = margin;
-      row.forEach((cell, index) => {
-        const width = widths[index] ?? 80;
-        text(cellText(cell, width), x + 8, y - 7, 8, index === 0 ? "0.05 0.16 0.36" : "0.2 0.27 0.36");
-        if (index > 0) line(x, y + 8, x, y - 16, "0.89 0.92 0.96");
-        x += width;
-      });
-      line(margin, y - 16, pageWidth - margin, y - 16, "0.88 0.92 0.96");
-      y -= rowHeight;
-    });
-    y -= 18;
-  };
-
-  startPage();
-  if (sections.length === 0) {
-    rect(margin, y - 40, contentWidth, 70, "1 1 1");
-    centeredText("Nothing was selected, or no records matched your choices.", y - 4, 11, "0.38 0.45 0.55");
-  } else {
-    sections.forEach(drawTable);
-  }
-  finishPage();
-
-  const fontObject = 3;
-  const pageObjects = pages.map((_, index) => 4 + index * 2);
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    `<< /Type /Pages /Kids [${pageObjects.map((objectId) => `${objectId} 0 R`).join(" ")}] /Count ${pages.length} >>`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-  pages.forEach((stream, index) => {
-    const pageObject = pageObjects[index];
-    const contentObject = pageObject + 1;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObject} 0 R >>`);
-    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-  });
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(pdf.length);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xref = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  offsets.slice(1).forEach((offset) => {
-    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  });
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return pdf;
-}
-
-function escapePdf(value: string) {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)").replace(/[^\x20-\x7E]/g, "");
-}
-
-function wrapPdfLine(value: string, max: number) {
-  const words = String(value).split(" ");
-  const lines: string[] = [];
-  let current = "";
-  words.forEach((word) => {
-    if (`${current} ${word}`.trim().length > max) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = `${current} ${word}`.trim();
-    }
-  });
-  if (current) lines.push(current);
-  return lines;
 }
 
 function formatShortDate(value: string) {
@@ -964,47 +767,6 @@ function ExportCheck({ labelText, checked, onChange }: { labelText: string; chec
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
       {labelText}
     </label>
-  );
-}
-
-function ScheduleModal({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: () => void }) {
-  const [frequency, setFrequency] = useState("Weekly");
-  const [recipient, setRecipient] = useState("admin@safecommunity.local");
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
-          <div>
-            <h2 className="text-xl font-bold text-slate-950">Set report reminder</h2>
-            <p className="mt-1 text-sm text-slate-500">Set a reminder in this browser for regular report downloads.</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close reminder window"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="space-y-4 p-5">
-          <label className="block">
-            <span className="mb-1 block text-sm font-bold text-slate-700">Frequency</span>
-            <select value={frequency} onChange={(event) => setFrequency(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100">
-              <option>Daily</option>
-              <option>Weekly</option>
-              <option>Monthly</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-bold text-slate-700">Send to</span>
-            <input value={recipient} onChange={(event) => setRecipient(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-          </label>
-          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            <p className="font-bold">Preview</p>
-            <p className="mt-1">{frequency} reports will be prepared for {recipient || "the selected recipient"} using the choices shown here.</p>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-slate-200 p-5">
-          <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button onClick={onSave} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><Send className="h-4 w-4" />Save reminder</button>
-        </div>
-      </section>
-    </div>
   );
 }
 

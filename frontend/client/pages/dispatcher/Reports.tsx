@@ -89,11 +89,15 @@ const emptyAnalytics: AnalyticsResponse = {
 };
 
 const incidentExportRows = (incidents: IncidentResponse[]) =>
-  incidents.map((incident) => ({
+  incidents.map((incident, index) => ({
+    no: index + 1,
     reference: incident.referenceNumber,
     type: label(incident.type),
     status: label(incident.status),
     priority: label(incident.priority),
+    reporter: incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen",
+    assignedResponder: incident.assignedResponderName || "No team assigned",
+    responderStatus: incident.responderStatus ? label(incident.responderStatus) : "",
     systemScore: incident.priorityScore,
     systemConfidence: `${Math.round((incident.aiConfidenceScore ?? 0) * 100)}%`,
     suggestedSupport: incident.resourceSuggestion ?? "",
@@ -197,8 +201,8 @@ export default function Reports() {
       },
       {
         title: "Reports shown",
-        headers: ["Report number", "Kind of help", "Progress", "Urgency", "Place", "Reported on"],
-        rows: incidentExportRows(filteredIncidents).map((row) => [row.reference, row.type, row.status, row.priority, row.location, row.reportedAt]),
+        headers: ["#", "Report number", "Kind of help", "Progress", "Urgency", "Reported by", "Team member", "Support", "Place", "Reported on", "System certainty"],
+        rows: incidentExportRows(filteredIncidents).map((row) => [row.no, row.reference, row.type, row.status, row.priority, row.reporter, row.assignedResponder, row.suggestedSupport || "-", row.location, row.reportedAt, row.systemConfidence]),
       },
       {
         title: "Response team work",
@@ -218,8 +222,8 @@ export default function Reports() {
           <p className="mt-1 text-slate-600">Choose a time period, review emergency reports, and download what is on screen.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button disabled={filteredIncidents.length === 0} onClick={exportCsv} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"><Download className="h-4 w-4" /> Spreadsheet</button>
-          <button disabled={filteredIncidents.length === 0} onClick={exportPdf} className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-50"><FileText className="h-4 w-4" /> Document</button>
+          <button disabled={filteredIncidents.length === 0} onClick={exportCsv} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"><Download className="h-4 w-4" /> CSV</button>
+          <button disabled={filteredIncidents.length === 0} onClick={exportPdf} className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 font-medium text-slate-800 transition hover:bg-slate-50 disabled:opacity-50"><FileText className="h-4 w-4" /> PDF</button>
         </div>
       </div>
 
@@ -278,7 +282,7 @@ export default function Reports() {
 
       <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <div className="border-b p-5"><h2 className="text-lg font-semibold text-slate-950">{reportTitle}</h2><p className="mt-1 text-sm text-slate-500">{filteredIncidents.length} reports match your choices.</p></div>
-        <div className="overflow-x-auto"><table className="w-full"><thead className="bg-slate-50"><tr>{["Report number", "Kind of help", "Progress", "Urgency", "Place", "Reported on"].map((heading) => <th key={heading} className="px-4 py-3 text-left text-sm font-bold text-slate-800">{heading}</th>)}</tr></thead><tbody className="divide-y">{filteredIncidents.map((incident) => <tr key={incident.id}><td className="px-4 py-3 text-sm font-semibold text-slate-950">{incident.referenceNumber}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.type)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.status)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.priority)}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.manualLocation || "Shared location"}</td><td className="px-4 py-3 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[1120px]"><thead className="bg-slate-50"><tr>{["#", "Report number", "Kind of help", "Progress", "Urgency", "Reported by", "Team member", "Support", "Place", "Reported on", "System certainty"].map((heading) => <th key={heading} className="px-4 py-3 text-left text-sm font-bold text-slate-800">{heading}</th>)}</tr></thead><tbody className="divide-y">{filteredIncidents.length === 0 ? <tr><td colSpan={11} className="px-4 py-8 text-center text-sm font-medium text-slate-500">{loading ? "Loading real report data..." : "No reports match your choices."}</td></tr> : filteredIncidents.map((incident, index) => <tr key={incident.id}><td className="px-4 py-3 text-sm font-bold text-slate-500">{index + 1}</td><td className="px-4 py-3 text-sm font-semibold text-slate-950">{incident.referenceNumber}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.type)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.status)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.priority)}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.assignedResponderName || "No team assigned"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.resourceSuggestion || "-"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.manualLocation || "Shared location"}</td><td className="px-4 py-3 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td><td className="px-4 py-3 text-sm font-bold text-purple-700">{Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</td></tr>)}</tbody></table></div>
       </section>
     </div>
   );

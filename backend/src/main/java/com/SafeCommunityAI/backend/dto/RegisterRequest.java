@@ -13,7 +13,5 @@ public record RegisterRequest(
         @NotNull Role role,
         String phone,
         Boolean locationPrivacyConsent,
-        String organization,
-        String certificationLicense,
-        String vehicleNumber
+        String organization
 ) {}
