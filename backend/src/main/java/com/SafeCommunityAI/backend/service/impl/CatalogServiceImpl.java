@@ -23,13 +23,14 @@ public class CatalogServiceImpl implements CatalogService {
 
     @Override
     public List<?> resources() {
-        return resourceRepository.findAll();
+        return resourceRepository.findAll().stream().map(mapper::toResourceSummary).toList();
     }
 
     @Override
     public Object saveResource(ResourceRequest request) {
         Incident incident = request.assignedIncidentId() == null ? null : incidentRepository.findById(request.assignedIncidentId()).orElseThrow(() -> new ResourceNotFoundException("Incident not found"));
-        return resourceRepository.save(Resource.builder().name(request.name()).type(request.type()).status(request.status()).location(request.location()).assignedIncident(incident).build());
+        Resource resource = resourceRepository.save(Resource.builder().name(request.name()).type(request.type()).status(request.status()).location(request.location()).assignedIncident(incident).build());
+        return mapper.toResourceSummary(resource);
     }
 
     @Override
@@ -41,7 +42,7 @@ public class CatalogServiceImpl implements CatalogService {
         resource.setStatus(request.status());
         resource.setLocation(request.location());
         resource.setAssignedIncident(incident);
-        return resourceRepository.save(resource);
+        return mapper.toResourceSummary(resourceRepository.save(resource));
     }
 
     @Override
