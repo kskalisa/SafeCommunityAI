@@ -129,6 +129,8 @@ function makePdf(title: string, sections: PdfSection[], meta: Required<PdfMeta>)
     circle(margin + logoSize / 2, logoTop + logoSize / 2, logoSize * 0.26, "1 1 1", 1.6);
     rect(margin + logoSize / 2 - 1, logoTop + logoSize / 2 - 1, 2, logoSize * 0.16, "1 1 1");
     rect(margin + logoSize / 2 - 1, logoTop + logoSize / 2 - logoSize * 0.16, 2, 2, "1 1 1");
+    text("SafeCommunity", margin + logoSize + 10, logoTop + logoSize - 14, wideTable ? 10 : 10.5, colors.ink, "F2");
+    text("Emergency Response", margin + logoSize + 10, logoTop + logoSize - 28, wideTable ? 7 : 7.5, colors.letter);
 
     centeredText(cleanTitle(title), centerX, pageHeight - (wideTable ? 76 : 88), wideTable ? 11 : 10.5, colors.ink, "F2");
     centeredText(meta.subtitle, centerX, pageHeight - (wideTable ? 92 : 104), wideTable ? 8.2 : 8.8, colors.letter);
