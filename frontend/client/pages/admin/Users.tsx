@@ -120,7 +120,46 @@ function UserForm({ user, resources, saving, onCancel, onSave }: { user: UserRes
 }
 
 function ResourceSelect({ resources, value, onChange }: { resources: ResourceResponse[]; value: number[]; onChange: (value: number[]) => void }) {
-  return <label className="text-sm font-bold text-slate-900">Resources<select multiple value={value.map(String)} onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => Number(option.value)))} className="mt-2 h-32 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100">{resources.map((resource) => <option key={resource.id} value={resource.id}>{resource.name} - {resource.type} ({resource.status})</option>)}</select></label>;
+  const [query, setQuery] = useState("");
+  const selected = useMemo(() => resources.filter((resource) => value.includes(resource.id)), [resources, value]);
+  const filtered = useMemo(() => {
+    const text = query.toLowerCase();
+    return resources.filter((resource) => `${resource.name} ${resource.type} ${resource.status} ${resource.location ?? ""}`.toLowerCase().includes(text));
+  }, [query, resources]);
+  const toggle = (id: number) => onChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id]);
+  return (
+    <div className="md:col-span-2">
+      <div className="flex items-center justify-between gap-3">
+        <label className="text-sm font-bold text-slate-900" htmlFor="responder-resource-search">Responder resources</label>
+        {value.length ? <button type="button" onClick={() => onChange([])} className="text-xs font-bold text-red-700 hover:text-red-800">Clear all</button> : null}
+      </div>
+      <input id="responder-resource-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search resources by name, type, status, or district" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" />
+      {selected.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {selected.map((resource) => (
+            <button key={resource.id} type="button" onClick={() => toggle(resource.id)} className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700 hover:bg-red-100">
+              {resource.name} x
+            </button>
+          ))}
+        </div>
+      ) : <p className="mt-2 text-xs text-slate-500">No resources selected yet.</p>}
+      <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+        {filtered.map((resource) => {
+          const checked = value.includes(resource.id);
+          return (
+            <label key={resource.id} className={`flex cursor-pointer items-start gap-3 border-b border-slate-100 p-3 last:border-b-0 ${checked ? "bg-red-50" : "hover:bg-slate-50"}`}>
+              <input type="checkbox" checked={checked} onChange={() => toggle(resource.id)} className="mt-1 h-4 w-4 rounded border-slate-300 text-red-600" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold text-slate-900">{resource.name}</span>
+                <span className="block text-xs text-slate-500">{resource.type.replace(/_/g, " ")} - {resource.status.replace(/_/g, " ")} - {resource.location || "No district"}</span>
+              </span>
+            </label>
+          );
+        })}
+        {filtered.length === 0 ? <p className="p-4 text-sm text-slate-500">No resources match your search.</p> : null}
+      </div>
+    </div>
+  );
 }
 
 function CertificateField({ user, file, onChange }: { user: UserResponse | null; file?: File; onChange: (file?: File) => void }) {
