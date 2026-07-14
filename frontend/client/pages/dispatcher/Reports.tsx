@@ -6,6 +6,9 @@ import type { AnalyticsResponse, IncidentResponse, IncidentStatus, IncidentType,
 
 type ReportRange = "TODAY" | "WEEK" | "MONTH" | "YEAR" | "CUSTOM";
 
+const PROJECT_TITLE = "Smart Community Support & Emergency Response System";
+const PDF_SUBTITLE = "Official emergency incident report generated from current filters";
+
 const friendlyLabels: Record<string, string> = {
   PENDING: "Waiting for review",
   PRIORITIZED: "Reviewed",
@@ -147,7 +150,6 @@ export default function Reports() {
     return parts.join(" - ");
   }, [fromDate, priority, reportRange, status, toDate, type]);
 
-  const currentRangeLabel = rangeOptions.find((option) => option.value === reportRange)?.label ?? "Custom";
   const filteredActiveIncidents = filteredIncidents.filter((incident) => incident.status !== "RESOLVED" && incident.status !== "CANCELLED").length;
   const filteredResolvedIncidents = filteredIncidents.filter((incident) => incident.status === "RESOLVED").length;
   const responseDurations = filteredIncidents
@@ -185,32 +187,21 @@ export default function Reports() {
   };
 
   const exportPdf = () => {
-    downloadPdf(`${reportTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`, `SafeCommunity - ${reportTitle}`, [
+    downloadPdf(`${reportTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`, PROJECT_TITLE, [
       {
-        title: "Report Summary",
-        headers: ["Metric", "Value"],
-        rows: [
-          ["Reports shown", filteredIncidents.length],
-          ["Report period", currentRangeLabel],
-          ["Open reports", filteredActiveIncidents],
-          ["Closed reports", filteredResolvedIncidents],
-          ["Average response time in minutes", filteredAverageResponseMinutes],
-          ["System certainty", `${confidencePct}%`],
-          ["Choices used", reportTitle],
-        ],
-      },
-      {
-        title: "Reports shown",
-        headers: ["#", "Report number", "Kind of help", "Progress", "Urgency", "Reported by", "Team member", "Support", "Place", "Reported on", "System certainty"],
+        title: "Emergency Incident Report",
+        headers: ["#", "Report number", "Incident type", "Status", "Priority", "Reported by", "Team member", "Support", "Place", "Reported on", "System certainty"],
         rows: incidentExportRows(filteredIncidents).map((row) => [row.no, row.reference, row.type, row.status, row.priority, row.reporter, row.assignedResponder, row.suggestedSupport || "-", row.location, row.reportedAt, row.systemConfidence]),
       },
-      {
-        title: "Response team work",
-        headers: ["Team member", "Jobs given", "Jobs finished", "Average arrival time"],
-        rows: analytics.responderPerformance.map((row) => [row.responder, row.assignments, row.completed, row.averageEtaMinutes]),
-      },
     ], {
-      filters: [`Range: ${currentRangeLabel}`, `Progress: ${status === "ALL" ? "All" : label(status)}`, `Urgency: ${priority === "ALL" ? "All" : label(priority)}`],
+      subtitle: PDF_SUBTITLE,
+      filters: [
+        `Incident Type: ${type === "ALL" ? "All" : label(type)}`,
+        `Priority: ${priority === "ALL" ? "All" : label(priority)}`,
+        `Status: ${status === "ALL" ? "All" : label(status)}`,
+        `Date Range: ${dateRangeLabel(fromDate, toDate)}`,
+        `Search: ${search || "Any"}`,
+      ],
     });
   };
 
@@ -247,8 +238,8 @@ export default function Reports() {
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search reports" className="w-full rounded-lg border border-slate-300 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           </label>
           <FilterSelect value={type} onChange={(value) => setType(value as "ALL" | IncidentType)} options={["ALL", ...Object.keys(analytics.incidentsByType)]} />
-          <FilterSelect ariaLabel="Progress" value={status} onChange={(value) => setStatus(value as "ALL" | IncidentStatus)} options={["ALL", ...Object.keys(analytics.incidentsByStatus)]} />
-          <FilterSelect ariaLabel="Urgency" value={priority} onChange={(value) => setPriority(value as "ALL" | PriorityLevel)} options={["ALL", ...Object.keys(analytics.incidentsByPriority)]} />
+          <FilterSelect ariaLabel="Status" value={status} onChange={(value) => setStatus(value as "ALL" | IncidentStatus)} options={["ALL", ...Object.keys(analytics.incidentsByStatus)]} />
+          <FilterSelect ariaLabel="Priority" value={priority} onChange={(value) => setPriority(value as "ALL" | PriorityLevel)} options={["ALL", ...Object.keys(analytics.incidentsByPriority)]} />
           <input type="date" value={fromDate} onChange={(event) => { setReportRange("CUSTOM"); setFromDate(event.target.value); }} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" />
           <input type="date" value={toDate} onChange={(event) => { setReportRange("CUSTOM"); setToDate(event.target.value); }} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm" />
         </div>
@@ -265,7 +256,7 @@ export default function Reports() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border bg-white p-6 shadow-sm">
-          <h2 className="mb-5 flex items-center gap-2 text-lg font-semibold text-slate-950"><BarChart3 className="h-5 w-5" /> Reports by Urgency</h2>
+          <h2 className="mb-5 flex items-center gap-2 text-lg font-semibold text-slate-950"><BarChart3 className="h-5 w-5" /> Reports by Priority</h2>
           <div className="flex h-52 items-end justify-around gap-3">
             {priorityRows.map((item) => <div key={item.priority} className="flex flex-1 flex-col items-center"><div className="w-full rounded-t bg-blue-600" style={{ height: Math.max(12, pct(item.count, filteredIncidents.length) * 1.8) }} /><p className="mt-2 text-xs font-medium text-slate-600">{label(item.priority)}</p><p className="text-xs font-semibold text-slate-950">{item.count}</p></div>)}
           </div>
@@ -282,14 +273,24 @@ export default function Reports() {
 
       <section className="overflow-hidden rounded-lg border bg-white shadow-sm">
         <div className="border-b p-5"><h2 className="text-lg font-semibold text-slate-950">{reportTitle}</h2><p className="mt-1 text-sm text-slate-500">{filteredIncidents.length} reports match your choices.</p></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[1120px]"><thead className="bg-slate-50"><tr>{["#", "Report number", "Kind of help", "Progress", "Urgency", "Reported by", "Team member", "Support", "Place", "Reported on", "System certainty"].map((heading) => <th key={heading} className="px-4 py-3 text-left text-sm font-bold text-slate-800">{heading}</th>)}</tr></thead><tbody className="divide-y">{filteredIncidents.length === 0 ? <tr><td colSpan={11} className="px-4 py-8 text-center text-sm font-medium text-slate-500">{loading ? "Loading real report data..." : "No reports match your choices."}</td></tr> : filteredIncidents.map((incident, index) => <tr key={incident.id}><td className="px-4 py-3 text-sm font-bold text-slate-500">{index + 1}</td><td className="px-4 py-3 text-sm font-semibold text-slate-950">{incident.referenceNumber}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.type)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.status)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.priority)}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.assignedResponderName || "No team assigned"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.resourceSuggestion || "-"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.manualLocation || "Shared location"}</td><td className="px-4 py-3 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td><td className="px-4 py-3 text-sm font-bold text-purple-700">{Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full min-w-[1120px]"><thead className="bg-slate-50"><tr>{["#", "Report number", "Incident type", "Status", "Priority", "Reported by", "Team member", "Support", "Place", "Reported on", "System certainty"].map((heading) => <th key={heading} className="px-4 py-3 text-left text-sm font-bold text-slate-800">{heading}</th>)}</tr></thead><tbody className="divide-y">{filteredIncidents.length === 0 ? <tr><td colSpan={11} className="px-4 py-8 text-center text-sm font-medium text-slate-500">{loading ? "Loading real report data..." : "No reports match your choices."}</td></tr> : filteredIncidents.map((incident, index) => <tr key={incident.id}><td className="px-4 py-3 text-sm font-bold text-slate-500">{index + 1}</td><td className="px-4 py-3 text-sm font-semibold text-slate-950">{incident.referenceNumber}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.type)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.status)}</td><td className="px-4 py-3 text-sm text-slate-600">{label(incident.priority)}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.anonymousReport ? "Anonymous" : incident.reporterName || "Citizen"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.assignedResponderName || "No team assigned"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.resourceSuggestion || "-"}</td><td className="px-4 py-3 text-sm text-slate-600">{incident.manualLocation || "Shared location"}</td><td className="px-4 py-3 text-sm text-slate-600">{new Date(incident.reportedAt).toLocaleString()}</td><td className="px-4 py-3 text-sm font-bold text-purple-700">{Math.round((incident.aiConfidenceScore ?? 0) * 100)}%</td></tr>)}</tbody></table></div>
       </section>
     </div>
   );
 }
 
+function dateRangeLabel(fromDate: string, toDate: string) {
+  const from = fromDate ? formatReportDate(fromDate) : "Start";
+  const to = toDate ? formatReportDate(toDate) : "Today";
+  return `${from} to ${to}`;
+}
+
+function formatReportDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function FilterSelect({ value, onChange, options, ariaLabel = "Filter" }: { value: string; onChange: (value: string) => void; options: string[]; ariaLabel?: string }) {
   return <select aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700">{options.map((option) => <option key={option} value={option}>{option === "ALL" ? "All" : label(option)}</option>)}</select>;
 }
-
 

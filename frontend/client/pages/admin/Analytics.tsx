@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
-  X,
 } from "lucide-react";
 import {
   Bar,
@@ -39,13 +38,6 @@ type SortKey = "referenceNumber" | "type" | "priority" | "status" | "reporterNam
 type SortDirection = "asc" | "desc";
 type IncidentReportFilter = "ALL" | "OPEN" | "ASSIGNED" | "UNASSIGNED" | "RESOLVED";
 type ReportRange = "ALL" | "TODAY" | "WEEK" | "MONTH" | "YEAR";
-type ExportOptions = {
-  summary: boolean;
-  incidents: boolean;
-  users: boolean;
-  auditLogs: boolean;
-  selectedOnly: boolean;
-};
 type RealStats = {
   incidentCount: number;
   activeIncidents: number;
@@ -57,6 +49,8 @@ type RealStats = {
   aiAverageConfidence: number;
 };
 
+const PROJECT_TITLE = "Smart Community Support & Emergency Response System";
+const PDF_SUBTITLE = "Official emergency incident report generated from current filters";
 const colors = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"];
 const friendlyLabels: Record<string, string> = {
   PENDING: "Waiting for review",
@@ -153,14 +147,6 @@ export default function Analytics() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [page, setPage] = useState(1);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    summary: true,
-    incidents: true,
-    users: false,
-    auditLogs: false,
-    selectedOnly: true,
-  });
 
   const [analyticsQuery, usersQuery, logsQuery, incidentsQuery, resourcesQuery] = useQueries({
     queries: [
@@ -236,18 +222,17 @@ export default function Analytics() {
 
   const exportCsv = () => downloadCsv("safecommunity-reports.csv", exportRows.length ? exportRows : summaryRows(realStats, filteredLogs));
   const exportPdf = () => {
-    const incidentsForPdf = exportOptions.selectedOnly && selectedIncidents.length ? selectedIncidents : sortedIncidents;
-    const sections = buildPdfSections(exportOptions, realStats, filteredPeople, filteredLogs, incidentsForPdf, filteredLogs);
-    downloadPdf("safecommunity-reports.pdf", "SafeCommunity Reports & Overview", sections, {
+    const sections = buildEmergencyIncidentPdfSections(sortedIncidents);
+    downloadPdf("emergency-incident-report.pdf", PROJECT_TITLE, sections, {
+      subtitle: PDF_SUBTITLE,
       filters: [
+        `Incident Type: ${incidentReportFilterOptions.find((option) => option.value === incidentReportFilter)?.label ?? "All reports"}`,
+        `Priority: ${priority === "ALL" ? "All" : label(priority)}`,
+        `Status: ${status === "ALL" ? "All" : label(status)}`,
+        `Date Range: ${dateRangeLabel(reportRange)}`,
         `Search: ${search || "Any"}`,
-        `Progress: ${status === "ALL" ? "All" : label(status)}`,
-        `Urgency: ${priority === "ALL" ? "All" : label(priority)}`,
-        `Range: ${timeOptions.find((option) => option.value === reportRange)?.label ?? "All time"}`,
-        `Report type: ${incidentReportFilterOptions.find((option) => option.value === incidentReportFilter)?.label ?? "All reports"}`,
       ],
     });
-    setExportOpen(false);
   };
 
   const toggleSort = (key: SortKey) => {
@@ -265,7 +250,7 @@ export default function Analytics() {
             <p className="mt-3 text-sm text-slate-500">Live data loaded from {allIncidents.length} report{allIncidents.length === 1 ? "" : "s"}, {users.length} person record{users.length === 1 ? "" : "s"}, and {resources.length} support option{resources.length === 1 ? "" : "s"}.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ActionButton onClick={() => setExportOpen(true)} icon={<FileText className="h-4 w-4" />} label="PDF" />
+            <ActionButton onClick={exportPdf} icon={<FileText className="h-4 w-4" />} label="PDF" disabled={sortedIncidents.length === 0} />
             <ActionButton onClick={exportCsv} icon={<Download className="h-4 w-4" />} label="CSV" variant="secondary" />
             <ActionButton onClick={refetchAll} icon={<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />} label="Refresh" variant="ghost" />
           </div>
@@ -289,8 +274,8 @@ export default function Analytics() {
             <Search className="absolute left-3 top-8 h-4 w-4 text-slate-400" />
             <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search report number, person, team member, help type, place..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />
           </label>
-          <FilterSelect labelText="Progress" value={status} onChange={(value) => { setStatus(value as "ALL" | IncidentStatus); setPage(1); }} options={statusOptions} />
-          <FilterSelect labelText="Urgency" value={priority} onChange={(value) => { setPriority(value as "ALL" | PriorityLevel); setPage(1); }} options={priorityOptions} />
+          <FilterSelect labelText="Status" value={status} onChange={(value) => { setStatus(value as "ALL" | IncidentStatus); setPage(1); }} options={statusOptions} />
+          <FilterSelect labelText="Priority" value={priority} onChange={(value) => { setPriority(value as "ALL" | PriorityLevel); setPage(1); }} options={priorityOptions} />
           <FilterSelect labelText="Time period" value={reportRange} onChange={(value) => { setReportRange(value as ReportRange); setPage(1); }} options={timeOptions.map((option) => option.value)} display={(value) => timeOptions.find((option) => option.value === value)?.label ?? value} />
           <button onClick={resetFilters} className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
             <RotateCcw className="h-4 w-4" />
@@ -330,7 +315,7 @@ export default function Analytics() {
             </ResponsiveContainer>
           ) : <EmptyBlock text="No report trend is available yet." />}
         </Panel>
-        <Panel title="Progress Breakdown" subtitle="Current report progress totals">
+        <Panel title="Status Breakdown" subtitle="Current report status totals">
           {chartData.status.length ? (
             <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
               <ResponsiveContainer width="100%" height={260}>
@@ -343,7 +328,7 @@ export default function Analytics() {
               </ResponsiveContainer>
               <LegendRows rows={chartData.status} total={filteredIncidents.length} />
             </div>
-          ) : <EmptyBlock text="No progress data is available yet." />}
+          ) : <EmptyBlock text="No status data is available yet." />}
         </Panel>
       </section>
 
@@ -380,9 +365,9 @@ export default function Analytics() {
                       </th>
                       <Th>#</Th>
                       <SortableTh text="Report number" sortKey="referenceNumber" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Kind of help" sortKey="type" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Urgency" sortKey="priority" active={sortKey} direction={sortDirection} onSort={toggleSort} />
-                      <SortableTh text="Progress" sortKey="status" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Incident type" sortKey="type" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Priority" sortKey="priority" active={sortKey} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTh text="Status" sortKey="status" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <SortableTh text="Reported by" sortKey="reporterName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <SortableTh text="Response team member" sortKey="assignedResponderName" active={sortKey} direction={sortDirection} onSort={toggleSort} />
                       <Th>Place</Th>
@@ -434,15 +419,6 @@ export default function Analytics() {
         </Panel>
       </section>
 
-      <ExportModal
-        open={exportOpen}
-        options={exportOptions}
-        selectedCount={selectedRows.length}
-        filteredCount={sortedIncidents.length}
-        onChange={setExportOptions}
-        onClose={() => setExportOpen(false)}
-        onExport={exportPdf}
-      />
     </div>
   );
 }
@@ -493,7 +469,7 @@ function buildInsightsFromRecords(realStats: RealStats, filteredStats: RealStats
   const topStatus = countRows(incidents, (incident) => incident.status)[0];
   if (topType) insights.push(`${topType.name} is the most common kind of help in this view, with ${topType.value} report${topType.value === 1 ? "" : "s"}.`);
   if (filteredStats.pendingIncidentQueue > 0) insights.push(`${filteredStats.pendingIncidentQueue} report${filteredStats.pendingIncidentQueue === 1 ? " is" : "s are"} still waiting or already reviewed.`);
-  if (topStatus) insights.push(`${topStatus.name} is currently the largest progress group in the report list.`);
+  if (topStatus) insights.push(`${topStatus.name} is currently the largest status group in the report list.`);
   if (realStats.activeResponders > 0) insights.push(`${realStats.activeResponders} response team account${realStats.activeResponders === 1 ? " is" : "s are"} ready to use.`);
   if (realStats.aiAverageConfidence > 0) insights.push(`The system certainty across loaded reports is ${realStats.aiAverageConfidence}%.`);
   return insights;
@@ -531,37 +507,25 @@ function incidentExportRows(incidents: IncidentResponse[]) {
   }));
 }
 
-function buildPdfSections(options: ExportOptions, stats: RealStats, users: UserResponse[], logs: AuditLogResponse[], incidents: IncidentResponse[], allLogs: AuditLogResponse[]): PdfSection[] {
-  const sections: PdfSection[] = [];
-  if (options.summary) {
-    sections.push({
-      title: "Summary",
-      headers: ["Item", "Number"],
-      rows: summaryRows(stats, allLogs).map((row) => [row.metric, row.value]),
-    });
-  }
-  if (options.incidents) {
-    sections.push({
-      title: options.selectedOnly && incidents.length ? "Selected Emergency Report List" : "Emergency Report List",
-      headers: ["#", "Report number", "Kind of help", "Urgency", "Progress", "Reported by", "Team member", "Place", "Reported on", "System certainty"],
+function buildEmergencyIncidentPdfSections(incidents: IncidentResponse[]): PdfSection[] {
+  return [
+    {
+      title: "Emergency Incident Report",
+      headers: ["#", "Report number", "Incident type", "Priority", "Status", "Reported by", "Team member", "Place", "Reported on", "System certainty"],
       rows: incidentExportRows(incidents).map((row) => [row.no, row.reference, row.category, row.priority, row.status, row.reporter, row.assignedResponder, row.location, row.created, row.aiConfidence]),
-    });
-  }
-  if (options.users) {
-    sections.push({
-      title: "People",
-      headers: ["Name", "Email", "Role", "Account state", "Created"],
-      rows: users.map((user) => [user.fullName, user.email, user.role, user.accountLocked ? "Locked" : user.enabled ? "Active" : "Disabled", new Date(user.createdAt).toLocaleDateString()]),
-    });
-  }
-  if (options.auditLogs) {
-    sections.push({
-      title: "Activity History",
-      headers: ["Action", "Person", "Area", "Created"],
-      rows: logs.map((log) => [log.action, log.actorEmail, log.entityType ?? "System", new Date(log.createdAt).toLocaleString()]),
-    });
-  }
-  return sections.filter((section) => section.rows.length > 0);
+    },
+  ];
+}
+
+function dateRangeLabel(range: ReportRange) {
+  if (range === "ALL") return "All time";
+  const start = rangeStart(range);
+  const end = new Date();
+  return start ? `${formatReportDate(start)} to ${formatReportDate(end)}` : "All time";
+}
+
+function formatReportDate(date: Date) {
+  return date.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function countRows<T>(items: T[], getKey: (item: T) => string) {
@@ -719,57 +683,6 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: "green" | 
   return <span className={`inline-flex rounded-md px-2.5 py-1 text-xs font-bold uppercase ring-1 ${tones[tone]}`}>{children}</span>;
 }
 
-function ExportModal({ open, options, selectedCount, filteredCount, onChange, onClose, onExport }: { open: boolean; options: ExportOptions; selectedCount: number; filteredCount: number; onChange: (options: ExportOptions) => void; onClose: () => void; onExport: () => void }) {
-  if (!open) return null;
-  const sectionCount = Number(options.summary) + Number(options.incidents) + Number(options.users) + Number(options.auditLogs);
-  const update = (key: keyof ExportOptions, value: boolean) => onChange({ ...options, [key]: value });
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-      <section className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
-          <div>
-            <h2 className="text-xl font-bold text-slate-950">Download report document</h2>
-            <p className="mt-1 text-sm text-slate-500">Choose what should be included in the downloaded document.</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Close download window"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="space-y-4 p-5">
-          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            <p className="font-bold">Current download choice</p>
-            <p className="mt-1">{options.selectedOnly && selectedCount > 0 ? `${selectedCount} selected report${selectedCount === 1 ? "" : "s"}` : `${filteredCount} matching report${filteredCount === 1 ? "" : "s"}`}</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ExportCheck labelText="Summary" checked={options.summary} onChange={(checked) => update("summary", checked)} />
-            <ExportCheck labelText="Report list" checked={options.incidents} onChange={(checked) => update("incidents", checked)} />
-            <ExportCheck labelText="People" checked={options.users} onChange={(checked) => update("users", checked)} />
-            <ExportCheck labelText="Activity history" checked={options.auditLogs} onChange={(checked) => update("auditLogs", checked)} />
-          </div>
-          <label className={`flex items-start gap-3 rounded-xl border p-4 ${selectedCount === 0 ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-200 bg-white text-slate-700"}`}>
-            <input type="checkbox" disabled={selectedCount === 0} checked={options.selectedOnly && selectedCount > 0} onChange={(event) => update("selectedOnly", event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600" />
-            <span>
-              <span className="block font-bold">Use selected reports only</span>
-              <span className="text-sm">{selectedCount === 0 ? "Select reports in the list to use this option." : "When off, the document uses all matching reports."}</span>
-            </span>
-          </label>
-        </div>
-        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 p-5">
-          <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button disabled={sectionCount === 0} onClick={onExport} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"><Download className="h-4 w-4" />Download document</button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ExportCheck({ labelText, checked, onChange }: { labelText: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 font-bold text-slate-700 transition hover:bg-white">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
-      {labelText}
-    </label>
-  );
-}
-
 function priorityTone(priority: PriorityLevel) {
   if (priority === "CRITICAL") return "red";
   if (priority === "HIGH") return "orange";
@@ -784,10 +697,4 @@ function statusTone(status: IncidentStatus) {
   if (status === "PRIORITIZED") return "purple";
   return "blue";
 }
-
-
-
-
-
-
 
